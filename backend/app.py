@@ -5,19 +5,21 @@ INTENTIONALLY INSECURE - DevSecOps Training Application
 
 import os
 import time
-from flask import Flask, request, jsonify, g
+
+from flask import Flask, g, jsonify, request
 from flask_cors import CORS
-from config import SECRET_KEY, DEBUG, DATABASE_URL, METRICS_ENABLED
+
+from config import DATABASE_URL, DEBUG, METRICS_ENABLED, SECRET_KEY
 from models.user import db
-from routes.auth import auth_bp
-from routes.products import products_bp
-from routes.cart import cart_bp
-from routes.orders import orders_bp
-from routes.reviews import reviews_bp
 from routes.admin import admin_bp
-from routes.vulnerable import vuln_bp
+from routes.auth import auth_bp
+from routes.cart import cart_bp
+from routes.metrics import REQUEST_COUNT, REQUEST_LATENCY, metrics_bp
+from routes.orders import orders_bp
+from routes.products import products_bp
 from routes.profile import profile_bp
-from routes.metrics import metrics_bp, REQUEST_COUNT, REQUEST_LATENCY
+from routes.reviews import reviews_bp
+from routes.vulnerable import vuln_bp
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
@@ -94,13 +96,13 @@ def index():
 def expose_config():
     """VULN: Sensitive information exposure"""
     from config import (
-        SECRET_KEY,
-        JWT_SECRET,
-        DATABASE_URL,
+        ADMIN_PASSWORD,
         AWS_ACCESS_KEY,
         AWS_SECRET_KEY,
+        DATABASE_URL,
+        JWT_SECRET,
+        SECRET_KEY,
         STRIPE_API_KEY,
-        ADMIN_PASSWORD,
     )
 
     return jsonify(
@@ -144,3 +146,4 @@ with app.app_context():
 if __name__ == "__main__":
     # VULN: Debug mode with binding to all interfaces
     app.run(host="0.0.0.0", port=5000, debug=True)
+    # test commit
