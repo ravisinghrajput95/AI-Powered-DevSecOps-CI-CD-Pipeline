@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <rect x="360" y="290" width="480" height="250" rx="28" fill="#ffffff"/>
+  <path d="M430 590h340l-60 110H490z" fill="rgba(255,255,255,0.85)"/>
+  <text x="600" y="760" fill="#ffffff" font-size="52" font-family="Segoe UI, sans-serif" text-anchor="middle">Laptop Stand</text>
+</svg>

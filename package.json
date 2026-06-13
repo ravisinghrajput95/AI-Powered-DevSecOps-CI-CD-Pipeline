@@ -1,0 +1,30 @@
+{
+  "name": "cloudcart",
+  "version": "1.0.0",
+  "description": "> **WARNING:** This application is **intentionally insecure**...",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "eslint": "^10.5.0",
+    "husky": "^9.1.7",
+    "jest": "^30.4.2",
+    "lint-staged": "^17.0.7"
+  },
+"lint-staged": {
+  "frontend/**/*.{js,jsx,ts,tsx}": [
+    "bash -c 'cd frontend && npx eslint --fix'"
+  ],
+  "backend/**/*.py": [
+    "python -m black",
+    "python -m flake8",
+    "python -m isort"
+  ]
+  }
+}

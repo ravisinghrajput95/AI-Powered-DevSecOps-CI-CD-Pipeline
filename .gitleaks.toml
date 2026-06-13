@@ -1,0 +1,29 @@
+title = "CloudCart Gitleaks Config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "cloudcart-aws-key"
+description = "AWS Access Key"
+regex = '''AKIA[0-9A-Z]{16}'''
+
+[[rules]]
+id = "cloudcart-stripe-key"
+description = "Stripe Secret Key"
+regex = '''sk_live_[a-zA-Z0-9]{24,}'''
+
+[[rules]]
+id = "cloudcart-github-token"
+description = "GitHub Personal Access Token"
+regex = '''ghp_[a-zA-Z0-9]{36,}'''
+
+[[rules]]
+id = "cloudcart-jwt-secret"
+description = "Hardcoded JWT Secret"
+regex = '''jwt-secret-[a-z-]+'''
+
+[allowlist]
+paths = [
+  '''README.md''',
+]

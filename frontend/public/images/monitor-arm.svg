@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <rect x="280" y="280" width="250" height="170" rx="22" fill="#ffffff"/>
+  <rect x="670" y="280" width="250" height="170" rx="22" fill="#ffffff"/>
+  <rect x="560" y="350" width="80" height="190" rx="18" fill="#ffffff"/>
+  <rect x="540" y="540" width="120" height="35" rx="12" fill="rgba(255,255,255,0.8)"/>
+  <text x="600" y="760" fill="#ffffff" font-size="52" font-family="Segoe UI, sans-serif" text-anchor="middle">Monitor Arm</text>
+</svg>
