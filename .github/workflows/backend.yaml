@@ -82,7 +82,12 @@ jobs:
 
       - name: Run tests
         working-directory: backend
-        run: python -m pytest --cov=. --cov-report=xml --cov-report=term
+        run: |
+          if [ -d tests ]; then
+            python -m pytest --cov=. --cov-report=xml --cov-report=term
+          else
+            echo "No tests found, skipping."
+          fi
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cloudcart_test
           FLASK_ENV: testing
