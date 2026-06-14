@@ -62,7 +62,7 @@ jobs:
           python-version: '3.7'
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '14'
 
@@ -115,7 +115,7 @@ jobs:
         run: pip install flake8 && flake8 backend/ --max-line-length=120 || true
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '18'
 
