@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "lint:frontend": "cd frontend && npx eslint src --ext js,jsx",
     "prepare": "husky"
   },
   "keywords": [],
@@ -19,7 +20,7 @@
   },
 "lint-staged": {
   "frontend/**/*.{js,jsx,ts,tsx}": [
-    "eslint --fix"
+    "npm run lint:frontend"
   ],
   "backend/**/*.py": [
     "python -m black",
