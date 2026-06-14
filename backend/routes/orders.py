@@ -1,10 +1,11 @@
 """Order management routes"""
 
-from flask import Blueprint, request, jsonify, session
-from models.user import db
-from models.order import Order, OrderItem
+from flask import Blueprint, jsonify, request, session
+
 from models.cart import CartItem
+from models.order import Order, OrderItem
 from models.product import Product
+from models.user import db
 
 orders_bp = Blueprint("orders", __name__)
 

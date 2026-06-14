@@ -1,9 +1,10 @@
 """Shopping cart routes"""
 
-from flask import Blueprint, request, jsonify, session
-from models.user import db
+from flask import Blueprint, jsonify, request, session
+
 from models.cart import CartItem
 from models.product import Product
+from models.user import db
 
 cart_bp = Blueprint("cart", __name__)
 

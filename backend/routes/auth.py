@@ -1,12 +1,14 @@
 """Authentication routes - weak session management"""
 
 import hashlib
-import jwt
 from datetime import datetime, timedelta
-from flask import Blueprint, request, jsonify, session
-from werkzeug.security import generate_password_hash, check_password_hash
+
+import jwt
+from flask import Blueprint, jsonify, request, session
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from config import DEBUG, JWT_SECRET, SECRET_KEY
 from models.user import User, db
-from config import SECRET_KEY, JWT_SECRET, DEBUG
 
 auth_bp = Blueprint("auth", __name__)
 

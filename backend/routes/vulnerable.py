@@ -1,9 +1,11 @@
 """Intentionally vulnerable utility endpoints for DevSecOps training"""
 
 import os
+
 import requests
-from flask import Blueprint, request, jsonify, send_file
-from config import UPLOAD_FOLDER, INTERNAL_SERVICES
+from flask import Blueprint, jsonify, request, send_file
+
+from config import INTERNAL_SERVICES, UPLOAD_FOLDER
 
 vuln_bp = Blueprint("vulnerable", __name__)
 
@@ -91,6 +93,7 @@ def download_upload():
 def debug_info():
     """VULN: Debug endpoint exposes stack and config in production"""
     from flask import current_app
+
     import config as cfg
 
     return jsonify(

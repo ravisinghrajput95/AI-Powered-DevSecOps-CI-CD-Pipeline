@@ -1,8 +1,9 @@
 """User profile routes"""
 
-from flask import Blueprint, request, jsonify, session
-from models.user import User, db
+from flask import Blueprint, jsonify, request, session
 from werkzeug.security import generate_password_hash
+
+from models.user import User, db
 
 profile_bp = Blueprint("profile", __name__)
 

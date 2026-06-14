@@ -1,8 +1,9 @@
 """Product reviews - XSS stored in comments"""
 
-from flask import Blueprint, request, jsonify, session
-from models.user import db
+from flask import Blueprint, jsonify, request, session
+
 from models.review import Review
+from models.user import db
 
 reviews_bp = Blueprint("reviews", __name__)
 

@@ -1,9 +1,10 @@
 """Product catalog and search - SQL injection vulnerability"""
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 from sqlalchemy import text
-from models.user import db
+
 from models.product import Product
+from models.user import db
 
 products_bp = Blueprint("products", __name__)
 
