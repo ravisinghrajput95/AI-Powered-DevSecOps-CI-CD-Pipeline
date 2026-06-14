@@ -5,7 +5,7 @@ Flask>=3.0,<4
 Flask-CORS>=4.0,<5
 Flask-SQLAlchemy>=3.1,<4
 psycopg2-binary==2.9.10
-Werkzeug>=3.0,<4
+Werkzeug>=3.1.8,<4
 PyJWT>=2.8,<3
 requests>=2.31,<3
 Pillow>=10.0,<12
