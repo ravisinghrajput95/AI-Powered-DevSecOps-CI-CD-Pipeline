@@ -19,7 +19,7 @@
   },
 "lint-staged": {
   "frontend/**/*.{js,jsx,ts,tsx}": [
-    "bash -c 'cd frontend && npx eslint --fix'"
+    "eslint --fix"
   ],
   "backend/**/*.py": [
     "python -m black",

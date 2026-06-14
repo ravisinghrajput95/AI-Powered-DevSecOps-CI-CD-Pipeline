@@ -146,4 +146,3 @@ with app.app_context():
 if __name__ == "__main__":
     # VULN: Debug mode with binding to all interfaces
     app.run(host="0.0.0.0", port=5000, debug=True)
-    # test commit
