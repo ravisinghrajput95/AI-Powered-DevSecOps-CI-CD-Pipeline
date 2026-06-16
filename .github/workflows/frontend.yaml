@@ -15,9 +15,9 @@ on:
 
 env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  GCR_IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID }}/cloudcart-frontend
-  #GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
-  #GKE_ZONE: ${{ secrets.GKE_ZONE }}
+  GAR_REPOSITORY_FRONTEND: ${{ secrets.GAR_REPOSITORY_FRONTEND }}
+  GAR_REGION: ${{ secrets.GAR_REGION }}
+  FRONTEND_IMAGE_NAME: ${{ secrets.FRONTEND_IMAGE_NAME }}
 
 jobs:
   lint:
@@ -109,12 +109,12 @@ jobs:
           path: frontend/dist/
 
   docker:
-    name: Docker Build & Push
+    name: Docker Build & Push to GCR
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
-    needs: build
+    needs: test
 
     steps:
       - name: Checkout code
@@ -132,18 +132,18 @@ jobs:
             version: '>= 363.0.0'
 
       - name: Configure Docker for GCR
-        run: gcloud auth configure-docker --quiet
+        run: gcloud auth configure-docker $GAR_REGION-docker.pkg.dev --quiet
 
       - name: Build Docker image
         run: |
-          docker build \
-            -t ${{ env.GCR_IMAGE }}:${{ github.sha }} \
-            -t ${{ env.GCR_IMAGE }}:latest \
-            ./frontend
+           docker build \
+           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_FRONTEND/$BACKEND_IMAGE_NAME:${{ github.sha }} \
+           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_FRONTEND/$BACKEND_IMAGE_NAME:latest \
+           ./backend
 
-      - name: Push Docker image to GCR
+      - name: Push Docker image
         run: |
-          docker push ${{ env.GCR_IMAGE }}:${{ github.sha }}
-          docker push ${{ env.GCR_IMAGE }}:latest  
+           docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_FRONTEND/$FRONTEND_IMAGE_NAME:${{ github.sha }}
+           docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_FRONTEND/$FRONTEND_IMAGE_NAME:latest
 
             

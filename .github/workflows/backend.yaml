@@ -15,7 +15,7 @@ on:
 
 env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  GAR_REPOSITORY: ${{ secrets.GAR_REPOSITORY }}
+  GAR_REPOSITORY_BACKEND: ${{ secrets.GAR_REPOSITORY_BACKEND }}
   GAR_REGION: ${{ secrets.GAR_REGION }}
   BACKEND_IMAGE_NAME: ${{ secrets.BACKEND_IMAGE_NAME }}
 
@@ -134,11 +134,11 @@ jobs:
       - name: Build Docker image
         run: |
            docker build \
-           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY/$BACKEND_IMAGE_NAME:${{ github.sha }} \
-           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY/$BACKEND_IMAGE_NAME:latest \
+           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:${{ github.sha }} \
+           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:latest \
            ./backend
 
       - name: Push Docker image
         run: |
-           docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY/$BACKEND_IMAGE_NAME:${{ github.sha }}
-           docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY/$BACKEND_IMAGE_NAME:latest
+           docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:${{ github.sha }}
+           docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:latest
