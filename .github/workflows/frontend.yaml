@@ -137,9 +137,9 @@ jobs:
       - name: Build Docker image
         run: |
            docker build \
-           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_FRONTEND/$BACKEND_IMAGE_NAME:${{ github.sha }} \
-           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_FRONTEND/$BACKEND_IMAGE_NAME:latest \
-           ./backend
+           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_FRONTEND/$FRONTEND_IMAGE_NAME:${{ github.sha }} \
+           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_FRONTEND/$FRONTEND_IMAGE_NAME:latest \
+           ./frontend
 
       - name: Push Docker image
         run: |
