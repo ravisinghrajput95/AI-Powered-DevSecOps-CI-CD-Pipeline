@@ -15,9 +15,9 @@ on:
 
 env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  GCR_IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID }}/cloudcart-backend
-  #GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
-  #GKE_ZONE: ${{ secrets.GKE_ZONE }}
+  GAR_REPOSITORY: ${{ secrets.GAR_REPOSITORY }}
+  GAR_REGION: ${{ secrets.GAR_REGION }}
+  BACKEND_IMAGE_NAME: ${{ secrets.BACKEND_IMAGE_NAME }}
 
 jobs:
   lint:
@@ -129,16 +129,16 @@ jobs:
             version: '>= 363.0.0'
 
       - name: Configure Docker for GCR
-        run: gcloud auth configure-docker --quiet
+        run: gcloud auth configure-docker $GAR_REGION-docker.pkg.dev --quiet
 
       - name: Build Docker image
         run: |
-          docker build \
-            -t ${{ env.GCR_IMAGE }}:${{ github.sha }} \
-            -t ${{ env.GCR_IMAGE }}:latest \
-            ./backend
+           docker build \
+           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY/$BACKEND_IMAGE_NAME:${{ github.sha }} \
+           -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY/$BACKEND_IMAGE_NAME:latest \
+           ./backend
 
-      - name: Push Docker image to GCR
+      - name: Push Docker image
         run: |
-          docker push ${{ env.GCR_IMAGE }}:${{ github.sha }}
-          docker push ${{ env.GCR_IMAGE }}:latest  
+           docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY/$BACKEND_IMAGE_NAME:${{ github.sha }}
+           docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY/$BACKEND_IMAGE_NAME:latest
