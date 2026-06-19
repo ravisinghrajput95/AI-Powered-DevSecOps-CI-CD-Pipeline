@@ -1,0 +1,112 @@
+name: PostgreSQL Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      db_password:
+        description: "PostgreSQL password (leave blank to keep current secret value if release exists)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  NAMESPACE: cloudcart
+  RELEASE_NAME: postgres
+  CHART_PATH: ./helm/postgresql
+
+jobs:
+  deploy-postgresql:
+    name: Deploy PostgreSQL via Helm
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
+        with:
+            version: '>= 363.0.0'
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_ZONE }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Ensure namespace exists
+        run: |
+          kubectl create namespace ${{ env.NAMESPACE }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy PostgreSQL via Helm
+        run: |
+          helm upgrade --install ${{ env.RELEASE_NAME }} ${{ env.CHART_PATH }} \
+            --namespace ${{ env.NAMESPACE }} \
+            --set namespace=${{ env.NAMESPACE }} \
+            ${{ github.event.inputs.db_password != '' && format('--set password={0}', github.event.inputs.db_password) || '' }} \
+            --wait \
+            --timeout 180s
+
+      - name: Wait for StatefulSet rollout
+        run: |
+          kubectl rollout status statefulset/postgres \
+            --namespace ${{ env.NAMESPACE }} \
+            --timeout=180s
+
+      - name: Verify StatefulSet
+        run: |
+          echo "Checking StatefulSet status..."
+          kubectl get statefulset postgres -n ${{ env.NAMESPACE }} -o wide
+
+          READY=$(kubectl get statefulset postgres -n ${{ env.NAMESPACE }} -o jsonpath='{.status.readyReplicas}')
+          DESIRED=$(kubectl get statefulset postgres -n ${{ env.NAMESPACE }} -o jsonpath='{.spec.replicas}')
+
+          if [ "$READY" != "$DESIRED" ]; then
+            echo "StatefulSet not fully ready: $READY/$DESIRED replicas"
+            kubectl describe statefulset postgres -n ${{ env.NAMESPACE }}
+            exit 1
+          fi
+          echo "StatefulSet healthy: $READY/$DESIRED replicas ready"
+
+      - name: Verify PVC is bound
+        run: |
+          echo "Checking PersistentVolumeClaim status..."
+          kubectl get pvc -n ${{ env.NAMESPACE }} -l app=postgres -o wide
+
+          PVC_STATUS=$(kubectl get pvc -n ${{ env.NAMESPACE }} \
+            -l app=postgres \
+            -o jsonpath='{.items[0].status.phase}')
+
+          if [ "$PVC_STATUS" != "Bound" ]; then
+            echo "PVC is not Bound. Current status: $PVC_STATUS"
+            kubectl describe pvc -n ${{ env.NAMESPACE }} -l app=postgres
+            exit 1
+          fi
+          echo "PVC is Bound"
+
+      - name: Verify Service
+        run: |
+          kubectl get service postgres -n ${{ env.NAMESPACE }} -o wide
+
+      - name: Verify Pod readiness
+        run: |
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=postgres -o wide
+          kubectl wait --for=condition=Ready pod \
+            -l app=postgres \
+            -n ${{ env.NAMESPACE }} \
+            --timeout=120s
