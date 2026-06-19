@@ -1,0 +1,78 @@
+name: Deploy Frontend to GKE
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - "helm/cloudcart/charts/frontend/**"
+      - "helm/cloudcart/Chart.yaml"
+      - "helm/cloudcart/values.yaml"
+
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  NAMESPACE: cloudcart
+  RELEASE_NAME: cloudcart
+  CHART_PATH: ./helm/cloudcart
+  FRONTEND_IMAGE: ${{ secrets.GAR_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GAR_REPOSITORY_FRONTEND }}/${{ secrets.FRONTEND_IMAGE_NAME }}
+
+jobs:
+  deploy:
+    name: Deploy Frontend via Helm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
+        with:
+            version: '>= 363.0.0'
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_REGION }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Update chart dependencies
+        run: helm dependency update ${{ env.CHART_PATH }}
+
+      - name: Ensure namespace exists
+        run: |
+          kubectl create namespace ${{ env.NAMESPACE }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy frontend via Helm
+        run: |
+          helm upgrade --install ${{ env.RELEASE_NAME }} ${{ env.CHART_PATH }} \
+            --namespace ${{ env.NAMESPACE }} \
+            --set frontend.image.repository=${{ env.FRONTEND_IMAGE }} \
+            --set frontend.image.tag=${{ github.sha }} \
+            --reuse-values \
+            --atomic \
+            --wait \
+            --timeout 120s
+
+      - name: Verify frontend rollout
+        run: |
+          kubectl rollout status deployment/${{ env.RELEASE_NAME }}-frontend \
+            --namespace ${{ env.NAMESPACE }} \
+            --timeout=120s
