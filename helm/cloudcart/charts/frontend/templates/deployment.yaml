@@ -23,6 +23,9 @@ spec:
         - name: frontend
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: BACKEND_HOST
+              value: {{ .Values.backendHost | quote }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
           resources:

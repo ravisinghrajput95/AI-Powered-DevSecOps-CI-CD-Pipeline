@@ -3,6 +3,7 @@ image:
   repository: ""
   tag: latest
   pullPolicy: IfNotPresent
+backendHost: cloudcart-backend
 service:
   type: LoadBalancer
   port: 80
