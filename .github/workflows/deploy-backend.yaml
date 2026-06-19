@@ -1,0 +1,83 @@
+name: Deploy Backend to GKE
+
+on:
+  workflow_run:
+    workflows:
+      - "Backend CI"
+    types:
+      - completed
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  NAMESPACE: cloudcart
+  RELEASE_NAME: cloudcart
+  CHART_PATH: ./helm/cloudcart
+  BACKEND_IMAGE: ${{ secrets.GAR_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GAR_REPOSITORY_BACKEND }}/${{ secrets.BACKEND_IMAGE_NAME }}
+
+jobs:
+  deploy:
+    name: Deploy Backend via Helm
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
+        with:
+            version: '>= 363.0.0'
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_REGION }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Update chart dependencies
+        run: helm dependency update ${{ env.CHART_PATH }}
+
+      - name: Verify PostgreSQL service exists
+        run: |
+          echo "Checking that postgres service is reachable before deploying backend..."
+          kubectl get service postgres -n ${{ env.NAMESPACE }} || {
+            echo "::error::PostgreSQL service 'postgres' not found in namespace '${{ env.NAMESPACE }}'."
+            echo "::error::Run the 'PostgreSQL Deploy' workflow first."
+            exit 1
+          }
+
+      - name: Deploy backend via Helm
+        run: |
+          helm upgrade --install ${{ env.RELEASE_NAME }} ${{ env.CHART_PATH }} \
+            --namespace ${{ env.NAMESPACE }} \
+            --set backend.image.repository=${{ env.BACKEND_IMAGE }} \
+            --set backend.image.tag=${{ github.event.workflow_run.head_sha }} \
+            --set backend.db.host=postgres \
+            --set backend.db.port=5432 \
+            --set backend.db.database=${{ secrets.DB_NAME }} \
+            --set backend.db.username=${{ secrets.DB_USERNAME }} \
+            --set backend.db.password=${{ secrets.DB_PASSWORD }} \
+            --reuse-values \
+            --atomic \
+            --wait \
+            --timeout 180s
+
+      - name: Verify backend rollout
+        run: |
+          kubectl rollout status deployment/${{ env.RELEASE_NAME }}-backend \
+            --namespace ${{ env.NAMESPACE }} \
+            --timeout=120s
