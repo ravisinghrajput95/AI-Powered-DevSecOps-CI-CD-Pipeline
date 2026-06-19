@@ -1,4 +1,4 @@
-name: Frontend CI/CD
+name: Frontend CI
 
 on:
   push:
@@ -6,12 +6,19 @@ on:
       - main
     paths:
       - "frontend/**"
+      - "helm/cloudcart/charts/frontend/**"
+      - "helm/cloudcart/Chart.yaml"
+      - "helm/cloudcart/values.yaml"
+
   workflow_dispatch:
   pull_request:
     branches:
       - main
     paths:
       - "frontend/**"
+      - "helm/cloudcart/charts/frontend/**"
+      - "helm/cloudcart/Chart.yaml"
+      - "helm/cloudcart/values.yaml"
 
 env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}

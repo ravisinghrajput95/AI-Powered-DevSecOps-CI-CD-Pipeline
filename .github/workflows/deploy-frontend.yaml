@@ -1,16 +1,11 @@
 name: Deploy Frontend to GKE
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "frontend/**"
-      - "helm/cloudcart/charts/frontend/**"
-      - "helm/cloudcart/Chart.yaml"
-      - "helm/cloudcart/values.yaml"
-
-  workflow_dispatch: {}
+  workflow_run:
+    workflows:
+      - "Frontend CI"
+    types:
+      - completed
 
 permissions:
   contents: read
@@ -24,6 +19,7 @@ env:
 
 jobs:
   deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     name: Deploy Frontend via Helm
     runs-on: ubuntu-latest
     steps:
@@ -65,7 +61,7 @@ jobs:
           helm upgrade --install ${{ env.RELEASE_NAME }} ${{ env.CHART_PATH }} \
             --namespace ${{ env.NAMESPACE }} \
             --set frontend.image.repository=${{ env.FRONTEND_IMAGE }} \
-            --set frontend.image.tag=${{ github.sha }} \
+            --set frontend.image.tag=${{ github.event.workflow_run.head_sha }} \
             --reuse-values \
             --atomic \
             --wait \
