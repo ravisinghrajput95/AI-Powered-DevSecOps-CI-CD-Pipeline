@@ -124,6 +124,8 @@ kubeControllerManager:
   enabled: false
 kubeScheduler:
   enabled: false
+coreDns:
+  enabled: false
 
 # ── Node exporter & kube-state-metrics (keep enabled - useful for learning) ──
 nodeExporter:
