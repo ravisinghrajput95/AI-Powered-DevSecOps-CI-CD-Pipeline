@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-frontend
+  namespace: {{ .Values.global.namespace | default "cloudcart" }}
+  labels:
+    app: cloudcart-frontend
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: cloudcart-frontend
+  ports:
+    - protocol: TCP
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: postgresql
+description: Standalone PostgreSQL StatefulSet for Cloudcart (independent Helm release)
+type: application
+version: 0.1.0
+appVersion: "13"

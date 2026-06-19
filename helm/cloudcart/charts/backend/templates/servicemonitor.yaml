@@ -1,0 +1,19 @@
+# ServiceMonitor tells Prometheus operator to scrape the backend /metrics endpoint
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cloudcart-backend
+  namespace: monitoring          # Must be in monitoring namespace for kube-prometheus-stack
+  labels:
+    release: kube-prometheus-stack   # Must match Prometheus operator's label selector
+spec:
+  namespaceSelector:
+    matchNames:
+      - cloudcart                # Scrape services in cloudcart namespace
+  selector:
+    matchLabels:
+      app: cloudcart-backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

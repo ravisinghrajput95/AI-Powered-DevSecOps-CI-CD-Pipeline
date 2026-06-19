@@ -1,0 +1,32 @@
+replicaCount: 1
+namespace: cloudcart
+
+image:
+  repository: postgres
+  tag: "13"
+  pullPolicy: IfNotPresent
+
+# Static service name — backend connects to this exact name.
+# Do NOT template this with {{ .Release.Name }}; it must stay stable
+# regardless of the Helm release name this chart is installed under.
+serviceName: postgres
+
+service:
+  type: ClusterIP
+  port: 5432
+
+database: cloudcart
+username: cloudcart
+password: cloudcart123
+
+storage:
+  size: 5Gi
+  storageClass: standard
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 200m
+    memory: 512Mi

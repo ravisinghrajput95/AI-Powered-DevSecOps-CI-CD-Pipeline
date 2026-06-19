@@ -1,0 +1,132 @@
+# ─────────────────────────────────────────
+# kube-prometheus-stack values for Cloudcart
+# Deploy with:
+# helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+# helm install monitoring prometheus-community/kube-prometheus-stack \
+#   -f helm/monitoring/values.yaml \
+#   --namespace monitoring --create-namespace
+# ─────────────────────────────────────────
+
+# ── Prometheus ──────────────────────────
+prometheus:
+  prometheusSpec:
+    # Scrape interval matching your local setup
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+
+    # Auto-discover pods with prometheus.io/scrape: "true" annotation
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+
+    # Scrape cloudcart namespace
+    additionalScrapeConfigs:
+      - job_name: cloudcart-backend
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - cloudcart
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+
+    # Minimal resource usage for learning
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+
+    # Minimal storage for learning
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+
+# ── Grafana ──────────────────────────────
+grafana:
+  adminPassword: "CloudCartGrafana123!"   # Change in production
+
+  service:
+    type: LoadBalancer                    # Expose via public IP (no domain)
+    port: 80
+    targetPort: 3000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  # Auto-provision your existing dashboards
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: cloudcart
+          orgId: 1
+          folder: Cloudcart
+          type: file
+          disableDeletion: false
+          options:
+            path: /var/lib/grafana/dashboards/cloudcart
+
+  dashboardsConfigMaps:
+    cloudcart: "cloudcart-grafana-dashboards"   # ConfigMap with your dashboard JSON
+
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://monitoring-kube-prometheus-prometheus:9090
+          access: proxy
+          isDefault: false
+
+# ── AlertManager ─────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+# ── Disable components not needed for learning ──
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+
+# ── Node exporter & kube-state-metrics (keep enabled - useful for learning) ──
+nodeExporter:
+  enabled: true
+kubeStateMetrics:
+  enabled: true

@@ -1,0 +1,25 @@
+replicaCount: 1
+image:
+  repository: ""
+  tag: latest
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 5000
+  targetPort: 5000
+db:
+  host: postgres
+  port: 5432
+  database: cloudcart
+  username: cloudcart
+  password: cloudcart123
+secretKey: super-secret-key
+env:
+  FLASK_DEBUG: "false"
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi

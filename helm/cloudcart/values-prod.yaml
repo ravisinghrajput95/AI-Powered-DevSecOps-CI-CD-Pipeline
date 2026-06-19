@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────
+# Production overrides
+# ─────────────────────────────────────────
+frontend:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+backend:
+  replicaCount: 2
+  env:
+    FLASK_DEBUG: "false"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi

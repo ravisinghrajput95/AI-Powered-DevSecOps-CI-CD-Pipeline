@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-db-init
+  namespace: {{ .Values.global.namespace | default "cloudcart" }}
+  annotations:
+    # Run this job only on install, not on upgrade
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ .Values.db.host }} {{ .Values.db.port }}; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+      containers:
+        - name: db-init
+          image: postgres:13
+          command:
+            - sh
+            - -c
+            - |
+              echo "Running init.sql..."
+              psql $DATABASE_URL -f /init/init.sql
+              echo "Database initialized!"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-backend-secret
+                  key: DATABASE_URL
+          volumeMounts:
+            - name: init-sql
+              mountPath: /init
+      volumes:
+        - name: init-sql
+          configMap:
+            name: db-init-sql

@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────
+# Global values shared across all subcharts
+# ─────────────────────────────────────────
+global:
+  namespace: cloudcart
+  imageRegistry: gcr.io
+  projectId: ""               # Set via --set global.projectId=YOUR_PROJECT_ID
+
+frontend:
+  replicaCount: 1
+  image:
+    repository: ""            # Set via CI/CD
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: LoadBalancer        # Exposes via GKE public IP
+    port: 80
+    targetPort: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+backend:
+  replicaCount: 1
+  image:
+    repository: ""            # Set via CI/CD
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP           # Internal only, frontend talks to it
+    port: 5000
+    targetPort: 5000
+  db:
+    host: postgres
+    port: 5432
+    database: cloudcart
+    username: cloudcart
+    password: cloudcart123
+  env:
+    FLASK_DEBUG: "false"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi

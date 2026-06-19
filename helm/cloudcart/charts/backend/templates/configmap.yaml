@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-backend-config
+  namespace: {{ .Values.global.namespace | default "cloudcart" }}
+data:
+  FLASK_DEBUG: {{ .Values.env.FLASK_DEBUG | quote }}
+  FLASK_ENV: "production"

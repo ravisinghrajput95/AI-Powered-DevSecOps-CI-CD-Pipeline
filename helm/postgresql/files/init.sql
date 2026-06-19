@@ -1,0 +1,4 @@
+-- Placeholder: Copy your actual database/init.sql content here
+-- This file is mounted into the PostgreSQL container and runs on first start
+-- It mirrors the docker-compose volume mount:
+-- ./database/init.sql:/docker-entrypoint-initdb.d/init.sql

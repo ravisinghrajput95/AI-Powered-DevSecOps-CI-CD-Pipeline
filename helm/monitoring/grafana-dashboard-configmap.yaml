@@ -1,0 +1,16 @@
+# ─────────────────────────────────────────
+# ConfigMap to load your existing Grafana dashboard
+# from monitoring/grafana/dashboards/cloudcart-overview.json
+# Apply with: kubectl apply -f helm/monitoring/grafana-dashboard-configmap.yaml -n monitoring
+# ─────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudcart-grafana-dashboards
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  cloudcart-overview.json: |
+    # Paste contents of monitoring/grafana/dashboards/cloudcart-overview.json here
+    # Or use the CI/CD pipeline to generate this from the file automatically
