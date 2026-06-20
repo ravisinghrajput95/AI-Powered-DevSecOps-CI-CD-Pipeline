@@ -1,8 +1,15 @@
 #!/bin/sh
 
-echo "🔍 Running pre-commit checks..."
-
-# Lint staged JS/TS and Python files
+echo "Running pre-commit checks..."
+source ./backend/venv/bin/activate 2>/dev/null || true
 npx lint-staged
 
-echo "✅ Pre-commit checks passed!"
+echo "Running GitGuardian secret scan..."
+ggshield secret scan pre-commit || {
+  echo "GitGuardian detected a potential secret above."
+  echo "This is a warning only — commit will proceed."
+  echo "Review the finding before pushing. If it's a false positive, run:"
+  echo "  ggshield secret ignore --last-found"
+}
+
+echo "Pre-commit checks passed!"

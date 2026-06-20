@@ -76,3 +76,6 @@ coverage.xml
 # Kubernetes secrets at runtime
 kubeconfig
 kubeconfig.*
+
+# Added by ggshield
+.cache_ggshield

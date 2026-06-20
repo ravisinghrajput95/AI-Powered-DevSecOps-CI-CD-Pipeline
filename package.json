@@ -18,14 +18,14 @@
     "jest": "^30.4.2",
     "lint-staged": "^17.0.7"
   },
-"lint-staged": {
-  "frontend/**/*.{js,jsx,ts,tsx}": [
-    "npm run lint:frontend"
-  ],
-  "backend/**/*.py": [
-    "python -m black",
-    "python -m flake8",
-    "python -m isort"
-  ]
+  "lint-staged": {
+    "frontend/**/*.{js,jsx,ts,tsx}": [
+      "npm run lint:frontend"
+    ],
+    "backend/**/*.py": [
+      "python -m black",
+      "python -m flake8",
+      "python -m isort"
+    ]
   }
 }
