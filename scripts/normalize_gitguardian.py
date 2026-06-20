@@ -3,12 +3,51 @@
 Normalizes a GitGuardian `ggshield secret scan ... --json` report into
 the shared schema: {tool, severity, rule_id, message, file, start_line, end_line}
 
-IMPORTANT: ggshield's exact JSON schema has not been verified against live
-output as of writing this script. This parser is written defensively with
-multiple fallback paths for differently-shaped responses. If it produces
-zero findings on a run where findings are known to exist, capture the raw
-gitguardian-findings.json from that run and the field-extraction logic
-below will need correcting to match the real shape.
+VERIFIED SCHEMA (confirmed against real ggshield output on 2026-06-20):
+{
+  "id": "<scan id>",
+  "type": "commit-range",
+  "scans": [
+    {
+      "id": "<commit sha>",
+      "type": "commit",
+      "entities_with_incidents": [
+        {
+          "mode": "NEW" | "MODIFY" | "DELETE" | "RENAME",
+          "filename": "path/to/file",
+          "incidents": [
+            {
+              "policy": "Secrets detection",
+              "type": "Username Password" | "Stripe Keys" | "Generic Password" | ...,
+              "occurrences": [
+                {"type": "username", "line_start": 14, "line_end": 14, "match": "cl*****rt"},
+                {"type": "password", "line_start": 15, "line_end": 15, "match": "cl********23"}
+              ],
+              "validity": "no_checker" | "invalid" | "valid" | ...,
+              "ignore_sha": "<sha>",
+              "incident_url": "https://dashboard.gitguardian.com/...",
+              "known_secret": true,
+              "ignore_reason": null | {"kind": "...", "detail": "..."}
+            }
+          ],
+          "total_incidents": 1,
+          "total_occurrences": 1
+        }
+      ],
+      "extra_info": {"author": "...", "email": "...", "date": "..."},
+      "total_incidents": 1,
+      "total_occurrences": 1
+    }
+  ],
+  "total_incidents": 6,
+  "total_occurrences": 6,
+  "secrets_engine_version": "2.165.0"
+}
+
+Note: each "incident" can have multiple "occurrences" (e.g. a Username
+Password incident has one occurrence for the username and one for the
+password, each with its own line number) — these are emitted as separate
+normalized findings since they have distinct line numbers.
 
 Usage:
     normalize_gitguardian.py <output.json> <gitguardian-findings.json>
@@ -17,75 +56,66 @@ import json
 import sys
 
 
-def get_first(d, keys, default=None):
-    """Return the first present key's value from a dict, trying multiple
-    possible key names since the real schema is unverified."""
-    for k in keys:
-        if isinstance(d, dict) and k in d and d[k] is not None:
-            return d[k]
-    return default
+def normalize_incident(incident, filename):
+    """Emit one normalized finding per occurrence within an incident."""
+    findings = []
+
+    incident_type = incident.get("type", "secret_detected")
+    validity = incident.get("validity", "unknown")
+    incident_url = incident.get("incident_url", "")
+    ignore_reason = incident.get("ignore_reason")
+
+    base_message = f"{incident_type} detected (validity: {validity})"
+    if incident_url:
+        base_message += f" — {incident_url}"
+    if ignore_reason:
+        base_message += f" [ignored: {ignore_reason.get('detail', ignore_reason.get('kind', ''))}]"
+
+    occurrences = incident.get("occurrences", [])
+    if not occurrences:
+        # Incident with no occurrence detail — still emit one finding
+        findings.append({
+            "tool": "gitguardian",
+            "severity": validity,
+            "rule_id": incident_type,
+            "message": base_message,
+            "file": filename,
+            "start_line": None,
+            "end_line": None,
+        })
+        return findings
+
+    for occ in occurrences:
+        occ_type = occ.get("type", "")
+        occ_message = base_message
+        if occ_type:
+            occ_message = f"{incident_type} ({occ_type}) detected (validity: {validity})"
+            if incident_url:
+                occ_message += f" — {incident_url}"
+            if ignore_reason:
+                occ_message += f" [ignored: {ignore_reason.get('detail', ignore_reason.get('kind', ''))}]"
+
+        findings.append({
+            "tool": "gitguardian",
+            "severity": validity,
+            "rule_id": incident_type,
+            "message": occ_message,
+            "file": filename,
+            "start_line": occ.get("line_start"),
+            "end_line": occ.get("line_end"),
+        })
+
+    return findings
 
 
 def normalize_entity(entity):
-    """
-    Attempt to normalize a single 'entity_with_incidents' style record.
-    ggshield's documented structure (per public examples) nests incidents
-    under each scanned entity/file, each incident containing one or more
-    occurrences with line numbers. This function tries several plausible
-    shapes defensively rather than assuming one is correct.
-    """
+    """One entity = one file within one commit scan."""
     findings = []
-
-    filename = get_first(entity, ["filename", "path", "file"], "unknown")
-    incidents = get_first(entity, ["incidents", "policy_breaks", "matches"], [])
-
-    if not isinstance(incidents, list):
-        incidents = [incidents]
+    filename = entity.get("filename", "unknown")
+    incidents = entity.get("incidents", [])
 
     for incident in incidents:
-        if not isinstance(incident, dict):
-            continue
-
-        rule_id = get_first(
-            incident,
-            ["policy", "detector_name", "type", "break_type"],
-            "secret_detected",
-        )
-        severity = get_first(incident, ["severity", "validity"], "warning")
-        message = get_first(
-            incident,
-            ["description", "message"],
-            f"Potential secret detected: {rule_id}",
-        )
-
-        occurrences = get_first(incident, ["occurrences", "matches"], [])
-        if not isinstance(occurrences, list) or not occurrences:
-            # No line-level detail available — emit one finding for the file
-            findings.append({
-                "tool": "gitguardian",
-                "severity": str(severity),
-                "rule_id": str(rule_id),
-                "message": str(message),
-                "file": filename,
-                "start_line": None,
-                "end_line": None,
-            })
-            continue
-
-        for occ in occurrences:
-            if not isinstance(occ, dict):
-                continue
-            line = get_first(occ, ["line_start", "line", "start_line"])
-            line_end = get_first(occ, ["line_end", "end_line"], line)
-            findings.append({
-                "tool": "gitguardian",
-                "severity": str(severity),
-                "rule_id": str(rule_id),
-                "message": str(message),
-                "file": filename,
-                "start_line": line,
-                "end_line": line_end,
-            })
+        findings.extend(normalize_incident(incident, filename))
 
     return findings
 
@@ -112,18 +142,21 @@ def main():
             print(f"WARNING: could not parse {input_path} as JSON: {e}", file=sys.stderr)
             data = None
 
-        if data is not None:
-            # Try top-level shapes: a bare list of entities, or a dict
-            # with a known wrapper key.
-            entities = data if isinstance(data, list) else get_first(
-                data, ["entities_with_incidents", "results", "scans"], []
-            )
-            if not isinstance(entities, list):
-                entities = [entities]
-
-            for entity in entities:
-                if isinstance(entity, dict):
+        if isinstance(data, dict):
+            scans = data.get("scans", [])
+            for scan in scans:
+                entities = scan.get("entities_with_incidents", [])
+                for entity in entities:
                     all_findings.extend(normalize_entity(entity))
+        elif isinstance(data, list):
+            # Fallback for a bare list shape, in case ggshield's output
+            # format differs by version/invocation.
+            for item in data:
+                if isinstance(item, dict) and "entities_with_incidents" in item:
+                    for entity in item["entities_with_incidents"]:
+                        all_findings.extend(normalize_entity(entity))
+                elif isinstance(item, dict) and "filename" in item:
+                    all_findings.extend(normalize_entity(item))
 
     with open(output_path, "w") as f:
         json.dump(all_findings, f, indent=2)
@@ -132,8 +165,8 @@ def main():
     if content and content != "[]" and not all_findings:
         print(
             "WARNING: input file was non-empty but 0 findings were extracted. "
-            "The GitGuardian JSON schema likely differs from what this script "
-            "expects — inspect the raw file and update normalize_gitguardian.py.",
+            "The GitGuardian JSON schema may have changed — inspect the raw "
+            "file and update normalize_gitguardian.py.",
             file=sys.stderr,
         )
 
