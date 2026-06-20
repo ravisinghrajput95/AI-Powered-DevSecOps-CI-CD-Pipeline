@@ -79,3 +79,12 @@ kubeconfig.*
 
 # Added by ggshield
 .cache_ggshield
+
+# Security scan workflow outputs - generated transiently in CI,
+# never meant to be committed. Committing these creates a feedback
+# loop where ggshield flags its own previous report as a secret.
+gitguardian-findings.json
+*.sarif
+codeql-*-report.csv
+normalized-*.json
+security-findings-*.json
