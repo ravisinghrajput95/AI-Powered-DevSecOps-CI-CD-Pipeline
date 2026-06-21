@@ -226,6 +226,26 @@ def build_component_sbom(sbom_path, snyk_findings):
     return summarize_sbom(packages, vulnerable_package_names)
 
 
+def compute_release_statistics(findings):
+    """Pre-computed counts over the (already-grouped) findings list, so the
+    analyst prompt never has to tally these itself. Counts grouped entries,
+    not occurrence_count-weighted totals — i.e. "10 distinct findings",
+    matching how a human would scan the findings list, not "36 raw hits"."""
+    by_severity = {}
+    by_category = {}
+    by_component = {}
+    for f in findings:
+        by_severity[f["severity"]] = by_severity.get(f["severity"], 0) + 1
+        by_category[f["category"]] = by_category.get(f["category"], 0) + 1
+        by_component[f["component"]] = by_component.get(f["component"], 0) + 1
+    return {
+        "total_findings": len(findings),
+        "by_severity": by_severity,
+        "by_category": by_category,
+        "by_component": by_component,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", required=True)
@@ -357,6 +377,7 @@ def main():
         "scan_status": scan_status,
         "signal_availability": signal_availability,
         "dast_scan_metadata": dast_scan_metadata,
+        "release_statistics": compute_release_statistics(grouped_findings),
     }
 
     with open(args.output, "w") as f:
