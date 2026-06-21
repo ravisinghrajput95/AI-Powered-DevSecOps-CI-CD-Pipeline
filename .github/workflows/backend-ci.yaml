@@ -146,7 +146,41 @@ jobs:
            -t $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:latest \
            ./backend
 
+      # Report-only, matching GitGuardian's warn-only philosophy elsewhere in
+      # this pipeline: a critical CVE in a base image doesn't block the push,
+      # but it is surfaced as a downloadable SARIF report for visibility.
+      - name: Scan image with Snyk
+        continue-on-error: true
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: ${{ env.GAR_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY_BACKEND }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+          args: --file=backend/Dockerfile --severity-threshold=critical --sarif-file-output=snyk-backend.sarif
+
+      - name: Upload Snyk scan report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: snyk-backend-report
+          path: snyk-backend.sarif
+          if-no-files-found: ignore
+
       - name: Push Docker image
         run: |
            docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:${{ github.sha }}
            docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:latest
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      # Keyless signing: signs the image just pushed, using the GitHub Actions
+      # OIDC token already enabled by `id-token: write` above (same permission
+      # used for GCP WIF auth, different audience — no conflict). No private
+      # key to store or rotate; Fulcio issues a short-lived cert tied to this
+      # exact workflow/repo/commit, and the signature + cert are recorded in
+      # Rekor's public transparency log.
+      - name: Sign image with Cosign (keyless)
+        run: |
+          cosign sign --yes \
+            $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:${{ github.sha }}
