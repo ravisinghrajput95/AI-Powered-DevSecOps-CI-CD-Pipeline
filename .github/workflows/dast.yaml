@@ -38,29 +38,36 @@ jobs:
       # convention of not relying on implicit tool defaults for behavior that
       # matters (report-only, no GitHub issue spam, consistent with how every
       # other scanner here was wired up).
+      #
+      # cmd_options is just '-I' — the action already runs zap-baseline.py
+      # with its own `-J report_json.json` by default. Adding a second -J
+      # with a custom filename (tried initially) made the underlying script
+      # only honor the last one, so the action's own expected report_json.json
+      # never got created and its post-scan step failed looking for it.
       - name: ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.15.0
         with:
           target: ${{ inputs.target_url }}
-          cmd_options: '-J zap-report.json -I'
+          cmd_options: '-I'
           fail_action: false
           allow_issue_writing: false
-          artifact_name: 'zap-baseline-html-md-report'
+          artifact_name: 'zap-baseline-report'
 
-      # Explicit upload rather than relying on the action's own bundling,
-      # since -J's custom filename isn't one of the action's built-in known
-      # report names — same defensive pattern used for Snyk/SBOM elsewhere.
+      # Explicit upload of just the JSON, in addition to the action's own
+      # html/md/json bundle above — same defensive pattern used for Snyk/SBOM
+      # elsewhere, so the normalizer's input file is predictably named and
+      # findable regardless of what else is in the action's artifact zip.
       - name: Upload ZAP JSON report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: zap-report-json
-          path: zap-report.json
+          path: report_json.json
           if-no-files-found: warn
 
       - name: Normalize ZAP findings
         if: always()
-        run: python3 scripts/normalize_zap.py normalized-zap.json zap-report.json
+        run: python3 scripts/normalize_zap.py normalized-zap.json report_json.json
 
       - name: Upload normalized ZAP findings
         if: always()

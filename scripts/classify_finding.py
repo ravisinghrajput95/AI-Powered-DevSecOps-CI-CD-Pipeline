@@ -59,7 +59,7 @@ CATEGORY_RULES = [
     (r"certificate validation|ssl/tls|server certificate|hostname verification|insecure tls|tls.*disabled|verify=false", "insecure-tls"),
 
     # Info disclosure
-    (r"stack-trace-exposure|stack trace.*expose|sensitive data.*log|information disclosure|verbose error", "info-disclosure"),
+    (r"stack-trace-exposure|stack trace.*expose|sensitive data.*log|information disclosure|verbose error|leaks version information|server leaks|x-powered-by", "info-disclosure"),
     (r"flask-debug|debug mode|debug feature is deactivated|flask_debug|debug=true", "debug-enabled"),
 
     # Workflow / CI-CD misconfig
@@ -90,6 +90,21 @@ CATEGORY_RULES = [
 
     # Misc JS code smells — maintainability only, no security signal.
     (r"nested ternary|imported multiple times|prefer `?number\.parse|unexpected negated condition|ambiguous spacing", "code-quality"),
+
+    # ZAP baseline scan's standard alert catalog — these names are part of a
+    # stable, well-known rule set used across virtually every ZAP baseline
+    # scan, so this is added proactively rather than waiting for real output.
+    # NOT yet validated against an actual scan of this app — check stderr
+    # for "unmatched rule_id" warnings on the first real run.
+    (r"content security policy|csp header not set|x-frame-options|x-content-type-options|strict-transport-security|permissions policy header|anti-clickjacking|cross-origin-embedder-policy|cross-origin-resource-policy|cross-origin-opener-policy", "missing-security-headers"),
+    (r"cookie.*without.*secure|cookie.*without.*httponly|cookie no httponly flag|cookie without.*samesite|samesite attribute", "insecure-cookie"),
+    (r"storable and cacheable|cache-control directives|retrieved from cache", "insecure-caching"),
+
+    # Purely informational ZAP findings — not a vulnerability, just an FYI
+    # note about the application (e.g. "this looks like a modern SPA").
+    # Kept as its own category rather than uncategorized, but with a
+    # recommendation that says plainly there's nothing to fix.
+    (r"modern web application", "informational-finding"),
 ]
 
 DEFAULT_CATEGORY = "uncategorized"
@@ -209,6 +224,10 @@ TYPE_BY_CATEGORY = {
     "react-props-validation": "quality",
     "accessibility": "accessibility",
     "react-performance": "performance",
+    "missing-security-headers": "security",
+    "insecure-cookie": "security",
+    "insecure-caching": "security",
+    "informational-finding": "quality",
 }
 
 # Fail-safe default for "uncategorized" (and any category someone adds to
@@ -254,6 +273,10 @@ RECOMMENDATIONS_BY_CATEGORY = {
     "react-props-validation": "Add PropTypes (or migrate to TypeScript) for this component's props so an invalid prop shape is caught during development instead of failing silently at runtime.",
     "accessibility": "Associate the form label with its control via `htmlFor`/`id` (or by wrapping the input in the label), and verify the element exposes the ARIA attributes assistive technologies rely on.",
     "react-performance": "Wrap the value passed to the Context provider in `useMemo` so it keeps a stable identity across renders and doesn't trigger unnecessary re-renders in consumers.",
+    "missing-security-headers": "Add the missing HTTP security header (e.g. Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security) at the web server, reverse proxy, or application framework level.",
+    "insecure-cookie": "Set the Secure and HttpOnly flags on all session/auth cookies, and set SameSite appropriately to reduce CSRF exposure.",
+    "insecure-caching": "Set Cache-Control: no-store (and Pragma: no-cache for older clients) on any response containing sensitive or user-specific data; static assets can remain cacheable.",
+    "informational-finding": "No action needed — this is an FYI-level observation about the application, not a vulnerability.",
     "uncategorized": "No automated category match was found for this rule_id/message. Since this codebase's rule_id surface is expected to be fixed and fully mapped, an uncategorized finding likely indicates a gap in classify_finding.py's CATEGORY_RULES rather than genuinely new code — inspect the rule_id below and add a matching pattern.",
 }
 
