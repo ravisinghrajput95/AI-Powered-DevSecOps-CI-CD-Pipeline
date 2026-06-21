@@ -73,7 +73,15 @@ ZAP_CONFIDENCE_MAP = {
 
 
 def normalize_alert(alert, site_name):
-    rule_id = str(alert.get("pluginid", "unknown"))
+    # alertRef distinguishes between variants of the same plugin (e.g. ZAP's
+    # three Cross-Origin-*-Policy header checks — Embedder/Opener/Resource —
+    # all share pluginid "90004" and are only told apart by alertRef
+    # "90004-1"/"90004-2"/"90004-3"). Using pluginid alone here would merge
+    # three genuinely distinct findings into one once build_release_context.py
+    # groups by rule_id — confirmed by inspecting a real scan's output, where
+    # pluginid 90004 covered three different header checks. alertRef falls
+    # back cleanly to the plain pluginid string when there's only one variant.
+    rule_id = str(alert.get("alertRef") or alert.get("pluginid", "unknown"))
     message = alert.get("alert") or alert.get("name", "")
     severity = RISKCODE_SEVERITY.get(str(alert.get("riskcode", "0")), "informational")
     confidence = ZAP_CONFIDENCE_MAP.get(str(alert.get("confidence", "0")), "low")
