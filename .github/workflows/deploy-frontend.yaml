@@ -15,6 +15,7 @@ env:
   NAMESPACE: cloudcart
   RELEASE_NAME: cloudcart
   CHART_PATH: ./helm/cloudcart
+  GAR_REGION: ${{ secrets.GAR_REGION }}
   FRONTEND_IMAGE: ${{ secrets.GAR_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GAR_REPOSITORY_FRONTEND }}/${{ secrets.FRONTEND_IMAGE_NAME }}
 
 jobs:
@@ -36,6 +37,23 @@ jobs:
         uses: 'google-github-actions/setup-gcloud@v3'
         with:
             version: '>= 363.0.0'
+
+      - name: Configure Docker for GAR
+        run: gcloud auth configure-docker $GAR_REGION-docker.pkg.dev --quiet
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      # Fail-closed gate: refuses to deploy unless this exact image digest was
+      # signed by the Frontend CI workflow, in this repo, on main. Anything
+      # unsigned, signed by a different workflow/repo, or tampered with after
+      # signing fails verification and the job stops here — Helm never runs.
+      - name: Verify image signature with Cosign
+        run: |
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/frontend-ci.yaml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            ${{ env.FRONTEND_IMAGE }}:${{ github.event.workflow_run.head_sha }}
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
