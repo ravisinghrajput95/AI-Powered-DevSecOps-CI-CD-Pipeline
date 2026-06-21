@@ -115,17 +115,30 @@ jobs:
           # grabs the most recent successful run and records exactly when it
           # happened — staleness becomes visible data in ReleaseContext,
           # not a hidden assumption that the result is fresh.
-          DAST_RUN_ID=$(gh run list --workflow="dast-scan.yml" --status=success \
-            --json databaseId --jq '.[0].databaseId')
+          #
+          # Resolved by workflow NAME via the Actions API, not by filename
+          # via `gh run list --workflow=<file>.yml` — the latter requires the
+          # file to exist on the default branch to resolve at all, which
+          # fails with a 404 even when the workflow has real successful runs,
+          # if the file currently lives on a different branch or was renamed.
+          DAST_WORKFLOW_ID=$(gh api "repos/${{ github.repository }}/actions/workflows" \
+            --jq '.workflows[] | select(.name=="DAST Scan (ZAP Baseline)") | .id' | head -n1)
 
-          if [ -z "$DAST_RUN_ID" ]; then
-            echo "::warning::No successful dast-scan.yml run found at all — deployed-app findings will be absent from ReleaseContext."
-          elif gh run download "$DAST_RUN_ID" -n "normalized-zap" -D inputs/ 2>/dev/null; then
-            SCANNED_AT=$(gh run view "$DAST_RUN_ID" --json createdAt --jq '.createdAt')
-            printf '{"run_id": "%s", "scanned_at": "%s"}' "$DAST_RUN_ID" "$SCANNED_AT" > inputs/dast_metadata.json
-            echo "Downloaded DAST findings from run $DAST_RUN_ID (scanned at $SCANNED_AT)"
+          if [ -z "$DAST_WORKFLOW_ID" ]; then
+            echo "::warning::No workflow named 'DAST Scan (ZAP Baseline)' found via the Actions API — deployed-app findings will be absent from ReleaseContext. Check that dast-scan.yml has been pushed and run at least once."
           else
-            echo "::warning::Found a successful dast-scan.yml run ($DAST_RUN_ID) but its 'normalized-zap' artifact wasn't found."
+            DAST_RUN_ID=$(gh run list --workflow="$DAST_WORKFLOW_ID" --status=success \
+              --json databaseId --jq '.[0].databaseId')
+
+            if [ -z "$DAST_RUN_ID" ]; then
+              echo "::warning::Found the DAST workflow but no successful run of it — deployed-app findings will be absent from ReleaseContext."
+            elif gh run download "$DAST_RUN_ID" -n "normalized-zap" -D inputs/ 2>/dev/null; then
+              SCANNED_AT=$(gh run view "$DAST_RUN_ID" --json createdAt --jq '.createdAt')
+              printf '{"run_id": "%s", "scanned_at": "%s"}' "$DAST_RUN_ID" "$SCANNED_AT" > inputs/dast_metadata.json
+              echo "Downloaded DAST findings from run $DAST_RUN_ID (scanned at $SCANNED_AT)"
+            else
+              echo "::warning::Found a successful DAST run ($DAST_RUN_ID) but its 'normalized-zap' artifact wasn't found."
+            fi
           fi
 
           echo "--- Contents of inputs/ ---"
