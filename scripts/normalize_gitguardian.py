@@ -63,11 +63,12 @@ def normalize_incident(incident, filename):
     occurrences = incident.get("occurrences", [])
     if not occurrences:
         message = build_message()
-        category, confidence, recommendation = classify("gitguardian", validity, incident_type, message)
+        category, type_, confidence, recommendation = classify("gitguardian", validity, incident_type, message)
         findings.append({
             "tool": "gitguardian",
             "severity": validity,
             "category": category,
+            "type": type_,
             "rule_id": incident_type,
             "message": message,
             "file": filename,
@@ -80,12 +81,13 @@ def normalize_incident(incident, filename):
     for occ in occurrences:
         occ_type = occ.get("type", "")
         message = build_message(occ_type)
-        category, confidence, recommendation = classify("gitguardian", validity, incident_type, message)
+        category, type_, confidence, recommendation = classify("gitguardian", validity, incident_type, message)
 
         findings.append({
             "tool": "gitguardian",
             "severity": validity,
             "category": category,
+            "type": type_,
             "rule_id": incident_type,
             "message": message,
             "file": filename,

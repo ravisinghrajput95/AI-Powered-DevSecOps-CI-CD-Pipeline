@@ -104,12 +104,13 @@ def normalize_issues(issues):
         rule_id = issue.get("rule", "unknown")
         message = issue.get("message", "")
 
-        category, confidence, recommendation = classify("sonarcloud", severity, rule_id, message)
+        category, type_, confidence, recommendation = classify("sonarcloud", severity, rule_id, message)
 
         findings.append({
             "tool": "sonarcloud",
             "severity": severity,
             "category": category,
+            "type": type_,
             "rule_id": rule_id,
             "message": message,
             "file": issue.get("component", "unknown"),

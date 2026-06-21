@@ -41,12 +41,13 @@ def normalize_sarif(sarif_path):
                 start_line = region.get("startLine")
                 end_line = region.get("endLine")
 
-            category, confidence, recommendation = classify("codeql", level, rule_id, message)
+            category, type_, confidence, recommendation = classify("codeql", level, rule_id, message)
 
             findings.append({
                 "tool": "codeql",
                 "severity": level,
                 "category": category,
+                "type": type_,
                 "rule_id": rule_id,
                 "message": message,
                 "file": file_path,

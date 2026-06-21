@@ -36,12 +36,15 @@ def main():
 
     by_tool = {}
     by_category = {}
+    by_type = {}
     uncategorized_findings = []
     for finding in combined:
         tool = finding.get("tool", "unknown")
         by_tool[tool] = by_tool.get(tool, 0) + 1
         category = finding.get("category", "unknown")
         by_category[category] = by_category.get(category, 0) + 1
+        finding_type = finding.get("type", "unknown")
+        by_type[finding_type] = by_type.get(finding_type, 0) + 1
         if category == "uncategorized":
             uncategorized_findings.append(finding)
 
@@ -49,6 +52,9 @@ def main():
     print("\nBy tool:")
     for tool, count in sorted(by_tool.items()):
         print(f"  {tool}: {count}")
+    print("\nBy type:")
+    for finding_type, count in sorted(by_type.items(), key=lambda x: -x[1]):
+        print(f"  {finding_type}: {count}")
     print("\nBy category:")
     for category, count in sorted(by_category.items(), key=lambda x: -x[1]):
         print(f"  {category}: {count}")
