@@ -21,9 +21,13 @@ Usage:
 import json
 import sys
 import time
+import os
 import urllib.request
 import urllib.parse
 import urllib.error
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from classify_finding import classify, build_line_field
 
 SONAR_API_BASE = "https://sonarcloud.io/api"
 MAX_POLL_ATTEMPTS = 30
@@ -96,14 +100,22 @@ def normalize_issues(issues):
     findings = []
     for issue in issues:
         text_range = issue.get("textRange", {})
+        severity = get_severity(issue)
+        rule_id = issue.get("rule", "unknown")
+        message = issue.get("message", "")
+
+        category, confidence, recommendation = classify("sonarcloud", severity, rule_id, message)
+
         findings.append({
             "tool": "sonarcloud",
-            "severity": get_severity(issue),
-            "rule_id": issue.get("rule", "unknown"),
-            "message": issue.get("message", ""),
+            "severity": severity,
+            "category": category,
+            "rule_id": rule_id,
+            "message": message,
             "file": issue.get("component", "unknown"),
-            "start_line": text_range.get("startLine"),
-            "end_line": text_range.get("endLine"),
+            "line": build_line_field(text_range.get("startLine"), text_range.get("endLine")),
+            "confidence": confidence,
+            "recommendation": recommendation,
         })
     return findings
 

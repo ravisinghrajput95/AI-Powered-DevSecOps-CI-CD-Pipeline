@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
 Normalizes one or more CodeQL SARIF files into the shared schema:
-{tool, severity, rule_id, message, file, start_line, end_line}
+{tool, severity, category, rule_id, message, file, line, confidence, recommendation}
 
 Usage:
     normalize_codeql.py <output.json> <sarif_file_1> [sarif_file_2 ...]
 """
 import json
 import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from classify_finding import classify, build_line_field
 
 
 def normalize_sarif(sarif_path):
@@ -37,14 +41,18 @@ def normalize_sarif(sarif_path):
                 start_line = region.get("startLine")
                 end_line = region.get("endLine")
 
+            category, confidence, recommendation = classify("codeql", level, rule_id, message)
+
             findings.append({
                 "tool": "codeql",
                 "severity": level,
+                "category": category,
                 "rule_id": rule_id,
                 "message": message,
                 "file": file_path,
-                "start_line": start_line,
-                "end_line": end_line,
+                "line": build_line_field(start_line, end_line),
+                "confidence": confidence,
+                "recommendation": recommendation,
             })
 
     return findings
