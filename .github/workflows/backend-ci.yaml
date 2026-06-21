@@ -166,6 +166,17 @@ jobs:
           path: snyk-backend.sarif
           if-no-files-found: ignore
 
+      # Scans the same local (pre-push) image — no registry auth needed, since
+      # the Docker daemon already has it loaded from the build step above.
+      # Uploaded as a workflow artifact automatically by the action.
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.GAR_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY_BACKEND }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+          format: spdx-json
+          output-file: sbom-backend.spdx.json
+          artifact-name: sbom-backend.spdx.json
+
       - name: Push Docker image
         run: |
            docker push $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:${{ github.sha }}
