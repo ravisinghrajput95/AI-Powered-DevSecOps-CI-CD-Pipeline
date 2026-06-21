@@ -33,7 +33,15 @@ CATEGORY_RULES = [
     (r"construct the os command|command-line-injection|command line.*user-provided|os command.*user|shell.*injection|command injection", "injection"),
     (r"path-injection|construct the path from user-controlled|path depends on a.*user-provided|path traversal|directory traversal|zip.?slip", "path-traversal"),
     (r"full-ssrf|construct the url from user-controlled|url of this request depends on|server-side request forgery|\bssrf\b", "ssrf"),
-    (r"reflective-xss|reflect unsanitized user-controlled|cross-site scripting|\bxss\b|dom-based xss|stored xss", "xss"),
+
+    # Client-side request handling (frontend/browser fetch construction) —
+    # kept distinct from the backend "ssrf" category above: same root cause
+    # (untrusted data shapes an outbound request URL) but the browser issues
+    # the request, not the server, so the blast radius and remediation
+    # (client-side allowlisting) differ from server-side SSRF.
+    (r"construct the url.?s path from user-controlled|tainted data is validated before being used to construct a client-side request url", "client-side-request-forgery"),
+
+    (r"reflective-xss|reflect unsanitized user-controlled|cross-site scripting|\bxss\b|dom-based xss|stored xss|execution of arbitrary client-side code|dangerouslysetinnerhtml", "xss"),
     (r"\bcsrf\b|cross-site request forgery", "csrf"),
     (r"xml external entit|\bxxe\b", "xxe"),
     (r"deserialization.*untrusted|unsafe deserialization|pickle\.loads|yaml\.load\b", "insecure-deserialization"),
@@ -62,6 +70,18 @@ CATEGORY_RULES = [
 
     # Constant/dead-code logic issues
     (r"boolean value is constant|expression.*constant|unreachable code|dead code|unused variable|unused import", "code-quality"),
+
+    # React / frontend quality (SonarCloud JS rules) — not security findings.
+    # Classified to their own categories (rather than the generic
+    # "code-quality" catch-all) where the issue type is distinct enough to
+    # be useful on its own; genuine misc code smells still fall into
+    # "code-quality" below.
+    (r"is missing in props validation", "react-props-validation"),
+    (r"form label must be associated with a control", "accessibility"),
+    (r"value prop to the context provider changes every render", "react-performance"),
+
+    # Misc JS code smells — maintainability only, no security signal.
+    (r"nested ternary|imported multiple times|prefer `?number\.parse|unexpected negated condition|ambiguous spacing", "code-quality"),
 ]
 
 DEFAULT_CATEGORY = "uncategorized"
@@ -146,6 +166,7 @@ RECOMMENDATIONS_BY_CATEGORY = {
     "injection": "Use parameterized queries or an ORM instead of building commands/queries via string concatenation with user input.",
     "path-traversal": "Validate and sanitize user-supplied paths against an allowlist; resolve and confirm the final path stays within an intended base directory.",
     "ssrf": "Validate and allowlist destination hosts/URLs before making outbound requests; never construct request URLs directly from unsanitized user input.",
+    "client-side-request-forgery": "Validate and allowlist the destination path/host before using user-controlled data to build a client-side (browser) request URL; don't interpolate unsanitized input directly into fetch/XHR calls.",
     "xss": "Escape or sanitize user-supplied data before rendering it in HTML/JS output; use the framework's built-in templating auto-escaping.",
     "csrf": "Implement CSRF tokens on state-changing requests and verify the token server-side before processing the request.",
     "xxe": "Disable external entity resolution in the XML parser; use a parser configuration that rejects DTDs/external entities by default.",
@@ -161,6 +182,9 @@ RECOMMENDATIONS_BY_CATEGORY = {
     "cors-misconfiguration": "Restrict CORS to a specific allowlist of trusted origins instead of a permissive wildcard policy.",
     "http-method-misconfiguration": "Explicitly declare the allowed HTTP methods for this route instead of accepting all methods by default.",
     "code-quality": "Review the flagged code for correctness; this is a maintainability/quality finding rather than a direct security vulnerability.",
+    "react-props-validation": "Add PropTypes (or migrate to TypeScript) for this component's props so an invalid prop shape is caught during development instead of failing silently at runtime.",
+    "accessibility": "Associate the form label with its control via `htmlFor`/`id` (or by wrapping the input in the label), and verify the element exposes the ARIA attributes assistive technologies rely on.",
+    "react-performance": "Wrap the value passed to the Context provider in `useMemo` so it keeps a stable identity across renders and doesn't trigger unnecessary re-renders in consumers.",
     "uncategorized": "No automated category match was found for this rule_id/message. Since this codebase's rule_id surface is expected to be fixed and fully mapped, an uncategorized finding likely indicates a gap in classify_finding.py's CATEGORY_RULES rather than genuinely new code — inspect the rule_id below and add a matching pattern.",
 }
 
