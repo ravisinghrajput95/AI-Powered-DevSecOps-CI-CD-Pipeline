@@ -150,9 +150,7 @@ jobs:
         with:
           args: >
             -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}
-            -Dsonar.projectKey=cloudcart-backend
-            -Dsonar.sources=backend
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/uploads/**
+            -Dproject.settings=sonar-project-backend.properties
 
       # ─────────────────────────────────────────────────────────
       # Poll SonarCloud's task API until analysis completes, then
@@ -365,11 +363,30 @@ jobs:
       - name: Record scan status
         if: always()
         run: |
+          # Normalize GH Actions' own result vocabulary (success/failure/
+          # cancelled/skipped) into ours (success/failed/skipped) — folding
+          # cancelled into failed, since both mean "no usable result", and
+          # any unrecognized value fails safe to skipped rather than
+          # claiming success.
+          normalize_result() {
+            case "$1" in
+              success) echo "success" ;;
+              failure) echo "failed" ;;
+              cancelled) echo "failed" ;;
+              skipped) echo "skipped" ;;
+              *) echo "skipped" ;;
+            esac
+          }
+
+          GITGUARDIAN_STATUS=$(normalize_result "${{ needs.gitguardian-scan.result }}")
+          SONARCLOUD_STATUS=$(normalize_result "${{ needs.sonarcloud-backend.result }}")
+          CODEQL_STATUS=$(normalize_result "${{ needs.codeql-analyze.result }}")
+
           cat > scan_status_backend.json << EOF
           {
-            "gitguardian": "${{ needs.gitguardian-scan.result }}",
-            "sonarcloud": "${{ needs.sonarcloud-backend.result }}",
-            "codeql": "${{ needs.codeql-analyze.result }}"
+            "gitguardian": "$GITGUARDIAN_STATUS",
+            "sonarcloud": "$SONARCLOUD_STATUS",
+            "codeql": "$CODEQL_STATUS"
           }
           EOF
           cat scan_status_backend.json

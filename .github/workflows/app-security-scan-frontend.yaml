@@ -368,11 +368,27 @@ jobs:
       - name: Record scan status
         if: always()
         run: |
+          # See the equivalent step in app-security-scan-backend.yaml for
+          # why this normalizes GH Actions' result vocabulary into ours.
+          normalize_result() {
+            case "$1" in
+              success) echo "success" ;;
+              failure) echo "failed" ;;
+              cancelled) echo "failed" ;;
+              skipped) echo "skipped" ;;
+              *) echo "skipped" ;;
+            esac
+          }
+
+          GITGUARDIAN_STATUS=$(normalize_result "${{ needs.gitguardian-scan.result }}")
+          SONARCLOUD_STATUS=$(normalize_result "${{ needs.sonarcloud-frontend.result }}")
+          CODEQL_STATUS=$(normalize_result "${{ needs.codeql-analyze.result }}")
+
           cat > scan_status_frontend.json << EOF
           {
-            "gitguardian": "${{ needs.gitguardian-scan.result }}",
-            "sonarcloud": "${{ needs.sonarcloud-frontend.result }}",
-            "codeql": "${{ needs.codeql-analyze.result }}"
+            "gitguardian": "$GITGUARDIAN_STATUS",
+            "sonarcloud": "$SONARCLOUD_STATUS",
+            "codeql": "$CODEQL_STATUS"
           }
           EOF
           cat scan_status_frontend.json

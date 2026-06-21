@@ -46,7 +46,10 @@ KNOWN LIMITATIONS (current state of this pipeline, as of 2026-06-21):
 3. Per-tool scan_status isn't tracked upstream by merge_findings.py's output
    alone (a tool that ran-and-found-nothing looks identical to a tool that
    didn't run). Pass --scan-status to provide this explicitly; without it,
-   every tool's status is "unknown".
+   every tool's status is "not_configured". Recognized values: "success",
+   "failed", "skipped" (this release's scan didn't run, but the workflow
+   exists), "not_configured" (this tool has no status-reporting mechanism
+   at all, regardless of release).
 4. Nothing in this pipeline produces reachability, exploitability, business
    impact, or internet-exposure signals. These are not inferred — they stay
    absent, and signal_availability records this as "not_collected".
@@ -73,6 +76,42 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from classify_finding import RECOMMENDATIONS_BY_CATEGORY
 
+# Maps each tool's native severity vocabulary into one canonical 5-tier
+# scale (critical/high/medium/low/informational), so cross-tool reasoning
+# doesn't have to know that SonarCloud's "MEDIUM" and ZAP's "medium" mean
+# the same thing, or that CodeQL's "note" level commonly carries real
+# findings (e.g. sql-injection) despite sounding informational. Applied
+# ONLY at this ReleaseContext layer — normalize_*.py's own output and the
+# merged security-findings-*.json artifacts keep each tool's original
+# wording untouched, since those are the audit-trail/per-tool schema, not
+# the cross-tool reasoning layer.
+SEVERITY_NORMALIZATION = {
+    "codeql": {"error": "high", "warning": "medium", "note": "medium"},
+    "sonarcloud": {"blocker": "critical", "high": "high", "medium": "medium", "low": "low", "info": "informational"},
+    # GitGuardian's "severity" field is actually its validity-check result,
+    # not a risk tier — "valid" (confirmed live secret) is the closest thing
+    # to "critical" this data supports; "invalid" (confirmed dead) maps to
+    # low; anything where validity couldn't be checked stays at medium
+    # (uncertain, not confidently either way).
+    "gitguardian": {"valid": "critical", "invalid": "low", "no_checker": "medium", "unknown": "medium", "failed_to_check": "medium"},
+    "snyk": {"critical": "critical", "high": "high", "medium": "medium", "low": "low"},
+    "zap": {"high": "high", "medium": "medium", "low": "low", "informational": "informational"},
+}
+
+
+def normalize_severity(tool, raw_severity):
+    raw = (raw_severity or "").lower()
+    mapping = SEVERITY_NORMALIZATION.get(tool, {})
+    if raw in mapping:
+        return mapping[raw]
+    print(
+        f"WARNING: unrecognized severity {raw_severity!r} for tool {tool!r} — "
+        f"defaulting to 'medium'. Add a mapping to SEVERITY_NORMALIZATION in "
+        f"build_release_context.py.",
+        file=sys.stderr,
+    )
+    return "medium"
+
 
 def load_json(path, default):
     if not path:
@@ -91,12 +130,16 @@ def load_json(path, default):
 def tag_findings(findings, component):
     """Add component + a not-yet-available delta_status to each finding,
     rather than silently omitting the field (which would let the prompt
-    assume something about freshness with no basis)."""
+    assume something about freshness with no basis). Also normalizes
+    severity into one cross-tool scale, preserving the tool's original
+    wording as `original_severity` for traceability."""
     tagged = []
     for f in findings:
         f = dict(f)
         f["component"] = component
         f.setdefault("delta_status", "unknown")
+        f["original_severity"] = f.get("severity")
+        f["severity"] = normalize_severity(f.get("tool"), f.get("severity"))
         tagged.append(f)
     return tagged
 
@@ -161,6 +204,7 @@ def group_findings(findings, remediation_guide):
                 "locations": [],
                 "sample_message": f.get("message"),
                 "remediation_notes": [],
+                "original_severities": [],
             }
             order.append(key)
 
@@ -173,6 +217,10 @@ def group_findings(findings, remediation_guide):
         if loc not in g["locations"]:
             g["locations"].append(loc)
 
+        orig_sev = f.get("original_severity")
+        if orig_sev and orig_sev not in g["original_severities"]:
+            g["original_severities"].append(orig_sev)
+
         if note and note not in g["remediation_notes"]:
             g["remediation_notes"].append(note)
 
@@ -181,6 +229,17 @@ def group_findings(findings, remediation_guide):
         g = groups[key]
         if not g["remediation_notes"]:
             del g["remediation_notes"]
+        # Common case: every occurrence in a group shares the same original
+        # severity wording — collapse to a single field rather than a
+        # one-element list, for a cleaner read. Only the rare edge case
+        # (the same tool/rule_id/normalized-severity/category combination
+        # reported with genuinely different raw severity strings) keeps the
+        # plural list, so no information is lost either way.
+        original_severities = g.pop("original_severities")
+        if len(original_severities) == 1:
+            g["original_severity"] = original_severities[0]
+        elif len(original_severities) > 1:
+            g["original_severities"] = original_severities
         result.append(g)
     return result
 
@@ -235,7 +294,14 @@ def compute_release_statistics(findings):
     by_category = {}
     by_component = {}
     for f in findings:
-        by_severity[f["severity"]] = by_severity.get(f["severity"], 0) + 1
+        # Lowercased here ONLY for this aggregate bucket — different tools
+        # report severity in different cases (SonarCloud: "MEDIUM", ZAP:
+        # "medium"), which are the same tier but were fragmenting into
+        # separate keys in real output before this fix. Each finding's own
+        # `severity` field is untouched, so per-finding traceability to the
+        # tool's original wording is preserved.
+        severity_key = (f["severity"] or "unknown").lower()
+        by_severity[severity_key] = by_severity.get(severity_key, 0) + 1
         by_category[f["category"]] = by_category.get(f["category"], 0) + 1
         by_component[f["component"]] = by_component.get(f["component"], 0) + 1
     return {
@@ -327,23 +393,23 @@ def main():
         )
 
     default_scan_status = {
-        component: {tool: "unknown" for tool in ("codeql", "sonarcloud", "gitguardian", "snyk", "syft")}
+        component: {tool: "not_configured" for tool in ("codeql", "sonarcloud", "gitguardian", "snyk", "syft")}
         for component in ("backend", "frontend")
     }
-    default_scan_status["deployed-app"] = {"zap": "unknown"}
+    default_scan_status["deployed-app"] = {"zap": "not_configured"}
     scan_status = load_json(args.scan_status, default_scan_status)
     # Guaranteed present regardless of whether a passed-in --scan-status file
     # already accounts for it — release-readiness.yml's own scan-status merge
     # step doesn't know about DAST yet (it's a separate, on-demand workflow
     # not tied to a commit SHA the way the others are), so without this,
-    # "deployed-app" would be silently absent rather than honestly "unknown"
-    # whenever a real --scan-status file is passed.
-    scan_status.setdefault("deployed-app", {"zap": "unknown"})
+    # "deployed-app" would be silently absent rather than honestly
+    # "not_configured" whenever a real --scan-status file is passed.
+    scan_status.setdefault("deployed-app", {"zap": "not_configured"})
     if not args.scan_status:
         print(
             "NOTE: no --scan-status file provided. Every tool's scan_status will be "
-            "'unknown' rather than guessed — see KNOWN LIMITATIONS in this script's "
-            "docstring for how to wire this up properly.",
+            "'not_configured' rather than guessed — see KNOWN LIMITATIONS in this "
+            "script's docstring for how to wire this up properly.",
             file=sys.stderr,
         )
 

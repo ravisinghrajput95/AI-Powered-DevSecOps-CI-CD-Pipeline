@@ -228,21 +228,31 @@ jobs:
         run: |
           python3 - << 'EOF'
           import json
+          import os
 
-          ALL_TOOLS = ("codeql", "sonarcloud", "gitguardian", "snyk", "syft")
+          # codeql/sonarcloud/gitguardian are what app-security-scan-*.yaml
+          # actually tracks; snyk/syft aren't instrumented there at all
+          # (they're reported from backend-ci.yaml/frontend-ci.yaml instead,
+          # which doesn't write a scan-status file yet) — these are two
+          # different kinds of "we don't know": one because this release's
+          # scan never ran, one because nothing has ever recorded this
+          # tool's status regardless of release.
+          TRACKED_BY_SECURITY_SCAN = ("codeql", "sonarcloud", "gitguardian")
+          NOT_INSTRUMENTED = ("snyk", "syft")
 
-          def load_or_empty(path):
-              try:
-                  with open(path) as f:
-                      return json.load(f)
-              except FileNotFoundError:
-                  return {}
+          def build_component_status(status_path):
+              if not os.path.exists(status_path):
+                  result = {t: "skipped" for t in TRACKED_BY_SECURITY_SCAN}
+                  result.update({t: "not_configured" for t in NOT_INSTRUMENTED})
+                  return result
+              with open(status_path) as f:
+                  raw = json.load(f)
+              result = {t: raw.get(t, "skipped") for t in TRACKED_BY_SECURITY_SCAN}
+              result.update({t: "not_configured" for t in NOT_INSTRUMENTED})
+              return result
 
-          backend = {t: "unknown" for t in ALL_TOOLS}
-          backend.update(load_or_empty("inputs/scan_status_backend.json"))
-
-          frontend = {t: "unknown" for t in ALL_TOOLS}
-          frontend.update(load_or_empty("inputs/scan_status_frontend.json"))
+          backend = build_component_status("inputs/scan_status_backend.json")
+          frontend = build_component_status("inputs/scan_status_frontend.json")
 
           with open("inputs/scan_status.json", "w") as f:
               json.dump({"backend": backend, "frontend": frontend}, f, indent=2)

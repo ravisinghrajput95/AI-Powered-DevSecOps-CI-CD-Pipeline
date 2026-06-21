@@ -113,8 +113,17 @@ fact, not something to infer per finding.
 Use each finding's confidence field to weight it — a low-confidence
 finding should not move the assessment as much as a high-confidence one.
 Check scan_status before treating an empty findings list as a clean
-result. A tool that didn't run and a tool that ran and found nothing are
-different facts — ReleaseContext distinguishes them; use that field.
+result. Values are "success", "failed", "skipped" (this release's
+scan didn't run, though the check exists), or "not_configured" (no
+status-reporting mechanism exists for this tool at all) — these are four
+different facts, not interchangeable "we don't know" states.
+Each finding's severity is already normalized to one scale
+(critical/high/medium/low/informational) across all tools — use it
+directly for cross-tool comparison. original_severity (or
+original_severities, plural, in the rare case a group spans more than
+one) preserves the tool's exact original wording for traceability; cite
+it when referencing a specific tool's finding, but reason using the
+normalized severity.
 deployed-app findings (DAST) aren't tied to this release's commit the
 way other components' findings are — check dast_scan_metadata.days_stale
 before treating them as reflecting the current release. A non-trivial
