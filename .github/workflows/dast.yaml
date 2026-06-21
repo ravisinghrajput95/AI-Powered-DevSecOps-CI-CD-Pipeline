@@ -1,0 +1,155 @@
+name: DAST Scan (ZAP Baseline)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "URL to scan"
+        required: false
+        default: "http://35.224.10.204/"
+        type: string
+      reset_database:
+        description: "Reset the database after the scan (truncate + reseed). Off by default — Baseline Scan is passive/read-only, so this is mainly worth enabling if you suspect a GET route has a stateful side effect, or once Full Scan is ever adopted here."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  zap-baseline-scan:
+    name: ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code (for scripts/)
+        uses: actions/checkout@v6
+
+      # Baseline only: spider + passive analysis, no active attack payloads,
+      # no form submissions. Deliberately not action-full-scan — see the
+      # discussion that led here: backend/routes/admin.py's confirmed
+      # command-injection route and vulnerable.py's other primitives haven't
+      # been bounded the way the SSRF-to-metadata path was, so an active scan
+      # against this live target stays out of scope for now.
+      #
+      # fail_action/allow_issue_writing explicitly set even though false/true
+      # are the respective library defaults — matches this pipeline's existing
+      # convention of not relying on implicit tool defaults for behavior that
+      # matters (report-only, no GitHub issue spam, consistent with how every
+      # other scanner here was wired up).
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: ${{ inputs.target_url }}
+          cmd_options: '-J zap-report.json -I'
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: 'zap-baseline-html-md-report'
+
+      # Explicit upload rather than relying on the action's own bundling,
+      # since -J's custom filename isn't one of the action's built-in known
+      # report names — same defensive pattern used for Snyk/SBOM elsewhere.
+      - name: Upload ZAP JSON report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-report-json
+          path: zap-report.json
+          if-no-files-found: warn
+
+      - name: Normalize ZAP findings
+        if: always()
+        run: python3 scripts/normalize_zap.py normalized-zap.json zap-report.json
+
+      - name: Upload normalized ZAP findings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: normalized-zap
+          path: normalized-zap.json
+          if-no-files-found: warn
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Opt-in (reset_database input, defaults to false) rather than
+  # unconditional. Baseline Scan is passive/read-only — no attack payloads,
+  # no form submissions — so the mutation risk that originally justified an
+  # automatic reset doesn't really apply here. This is a persistent
+  # environment too (the same one everything else this session has been
+  # verified against), not a disposable preprod instance recreated on its
+  # own cadence — wiping its data after every scan by default would be a
+  # new recurring disruption for a risk that's now small. Worth keeping
+  # available for the one residual edge case (a GET route with a stateful
+  # side effect) and ready for whenever Full Scan is adopted, where this
+  # reasoning flips and it should probably go back to unconditional.
+  #
+  # NOT calling postgresql-deploy.yml — two problems ruled that out:
+  # 1. seed.sql's guard (`WHERE NOT EXISTS (SELECT 1 FROM products)`) only
+  #    checks the table isn't empty, not that its contents are correct. An
+  #    in-place UPDATE-style corruption would leave the table non-empty, so
+  #    re-running the seed Job would silently do nothing.
+  # 2. schema.sql's CREATE TABLE IF NOT EXISTS only ever runs via Postgres's
+  #    own /docker-entrypoint-initdb.d/ mechanism, which only fires against
+  #    a genuinely empty data directory — never against the already-
+  #    initialized PVC a `helm upgrade` leaves in place. There's no path
+  #    through postgresql-deploy.yml that re-creates a dropped table.
+  #
+  # Instead: connect to the live pod directly and TRUNCATE + re-apply both
+  # SQL files straight from the checked-out repo. Correct regardless of
+  # whether the prior corruption was a delete, an in-place update, or a
+  # dropped table — and reuses the exact same schema.sql/seed.sql that are
+  # the single source of truth, no duplicated SQL in this workflow.
+  #
+  # `users` is deliberately excluded from the TRUNCATE list — all the
+  # foreign keys here point FROM the truncated tables TO users, never the
+  # reverse, so this is safe either way. Pending confirmation on whether a
+  # depended-upon demo account exists; tell me if `users` should reset too.
+  # ───────────────────────────────────────────────────────────────────────
+  reset-database:
+    name: Reset Database
+    runs-on: ubuntu-latest
+    needs: zap-baseline-scan
+    if: ${{ always() && inputs.reset_database }}
+    steps:
+      - name: Checkout code (for schema.sql/seed.sql)
+        uses: actions/checkout@v6
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          version: '>= 363.0.0'
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_REGION }}
+
+      - name: Reset and reseed database
+        run: |
+          POSTGRES_POD=$(kubectl get pod -n cloudcart -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+          echo "Using pod: $POSTGRES_POD"
+
+          PGPASSWORD=$(kubectl get secret postgresql-secret -n cloudcart -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+
+          run_psql() {
+            kubectl exec -i -n cloudcart "$POSTGRES_POD" -- \
+              env PGPASSWORD="$PGPASSWORD" psql -U "${{ secrets.DB_USERNAME }}" -d "${{ secrets.DB_NAME }}" "$@"
+          }
+
+          echo "Truncating seeded tables (users excluded — see job comment)..."
+          run_psql -c "TRUNCATE order_items, orders, cart_items, reviews, products RESTART IDENTITY CASCADE;"
+
+          echo "Re-applying schema.sql (idempotent — recreates anything dropped)..."
+          run_psql < helm/postgresql/files/schema.sql
+
+          echo "Re-applying seed.sql (guaranteed to insert now that products is empty)..."
+          run_psql < helm/postgresql/files/seed.sql
+
+          echo "Reset complete."
