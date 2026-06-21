@@ -1,0 +1,362 @@
+name: App Security Scan (Frontend)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - "sonar-project.properties"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write    # required for ggshield-action PR annotations
+  security-events: write  # required for CodeQL SARIF upload
+  packages: read          # required to fetch internal/private CodeQL packs
+  actions: read            # required for CodeQL in private repos
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # JOB 1: GitGuardian secret scan — report only, never blocks
+  # ─────────────────────────────────────────────────────────────
+  gitguardian-scan:
+    name: Scan for Secrets (Report Only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: GitGuardian scan (GitHub annotation)
+        id: ggshield
+        uses: GitGuardian/ggshield-action@v1
+        continue-on-error: true
+        env:
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+        with:
+          args: --all-secrets
+
+      - name: Install python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install ggshield (for JSON report)
+        if: always()
+        run: pip install ggshield --break-system-packages
+
+      - name: Generate JSON findings report
+        if: always()
+        id: report
+        continue-on-error: true
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+        run: |
+          ggshield secret scan repo . --all-secrets --json > gitguardian-findings.json || true
+          echo "Report saved to gitguardian-findings.json"
+          cat gitguardian-findings.json
+
+      # ─────────────────────────────────────────────────────────
+      # Schema-independent check: a clean scan produces an empty
+      # array "[]" (or near-empty content). Anything else means
+      # findings exist.
+      # ─────────────────────────────────────────────────────────
+      - name: Check if findings exist
+        if: always()
+        id: check
+        run: |
+          if [ -s gitguardian-findings.json ] && [ "$(tr -d '[:space:]' < gitguardian-findings.json)" != "[]" ]; then
+            echo "has_findings=true" >> "$GITHUB_OUTPUT"
+            echo "Findings detected — artifact will be uploaded."
+          else
+            echo "has_findings=false" >> "$GITHUB_OUTPUT"
+            echo "No findings — skipping artifact upload."
+          fi
+
+      # ─────────────────────────────────────────────────────────
+      # Normalize into shared schema for the final merge job.
+      # ─────────────────────────────────────────────────────────
+      - name: Normalize GitGuardian findings
+        if: always()
+        run: python3 scripts/normalize_gitguardian.py normalized-gitguardian.json gitguardian-findings.json
+
+      - name: Upload raw findings artifact
+        if: always() && steps.check.outputs.has_findings == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: gitguardian-findings-frontend-${{ github.run_id }}
+          path: gitguardian-findings.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload normalized findings (for merge job)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: normalized-frontend-gitguardian
+          path: normalized-gitguardian.json
+          retention-days: 1
+          if-no-files-found: warn
+
+      - name: Summarize outcome (non-blocking)
+        if: always()
+        run: |
+          echo "GitGuardian annotation step outcome: ${{ steps.ggshield.outcome }}"
+          echo "Findings present: ${{ steps.check.outputs.has_findings }}"
+          echo "This job is report-only and does not block merges or deployments."
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2: SonarCloud static analysis, scoped to frontend/src only
+  # ─────────────────────────────────────────────────────────────
+  sonarcloud-frontend:
+    name: SonarCloud Analysis (Frontend)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run tests with coverage
+        # sonar-project.properties expects frontend/coverage/lcov.info
+        # to already exist before the scan step runs.
+        working-directory: frontend
+        run: npm test -- --coverage --watchAll=false
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}
+            -Dsonar.sources=frontend/src
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/uploads/**
+
+      # ─────────────────────────────────────────────────────────
+      # Poll SonarCloud's task API until analysis completes, then
+      # fetch issues via the Web API and normalize. Avoids fetching
+      # stale results from a previous scan (analysis is async).
+      # ─────────────────────────────────────────────────────────
+      - name: Setup Python (for fetch script)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Fetch and normalize SonarCloud issues
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          python3 scripts/fetch_sonarcloud_issues.py \
+            normalized-sonarcloud.json \
+            cloudcart \
+            "$SONAR_TOKEN" \
+            .scannerwork/report-task.txt
+
+      - name: Upload normalized findings (for merge job)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: normalized-frontend-sonarcloud
+          path: normalized-sonarcloud.json
+          retention-days: 1
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 3: CodeQL analysis — javascript-typescript + actions only
+  # ─────────────────────────────────────────────────────────────
+  codeql-analyze:
+    name: CodeQL Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Run manual build steps
+        if: matrix.build-mode == 'manual'
+        shell: bash
+        run: |
+          echo 'Replace this with commands to build your code, for example:'
+          echo '  make bootstrap'
+          echo '  make release'
+          exit 1
+
+      - name: Perform CodeQL Analysis
+        id: analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{matrix.language}}"
+          upload: true
+          output: sarif-results
+
+      - name: Upload SARIF for reporting
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sarif-frontend-${{ matrix.language }}
+          path: sarif-results/${{ matrix.language }}.sarif
+          retention-days: 1
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 4: Build a human-readable CSV report for THIS file's
+  # 2 languages (javascript-typescript + actions), and normalize
+  # into shared schema for the final merge job.
+  # ─────────────────────────────────────────────────────────────
+  codeql-report:
+    name: CodeQL Report (Frontend)
+    runs-on: ubuntu-latest
+    needs: codeql-analyze
+    if: always()
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code (for scripts/)
+        uses: actions/checkout@v6
+
+      - name: Download SARIF artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sarif-frontend-*
+          path: sarif-downloads
+          merge-multiple: false
+
+      - name: Install jq
+        run: sudo apt-get update -qq && sudo apt-get install -y jq
+
+      - name: Convert SARIF findings to CSV
+        run: |
+          echo "language,rule_id,severity,message,file,start_line,end_line" > codeql-frontend-report.csv
+
+          for dir in sarif-downloads/sarif-frontend-*/; do
+            lang=$(basename "$dir" | sed 's/^sarif-frontend-//')
+            sarif_file=$(find "$dir" -name "*.sarif" | head -n 1)
+
+            if [ -z "$sarif_file" ]; then
+              echo "No SARIF file found for $lang, skipping."
+              continue
+            fi
+
+            jq -r --arg lang "$lang" '
+              .runs[].results[]? |
+              [
+                $lang,
+                (.ruleId // "unknown"),
+                (.level // "note"),
+                (.message.text // "" | gsub(","; ";") | gsub("\n"; " ")),
+                (.locations[0].physicalLocation.artifactLocation.uri // "unknown"),
+                (.locations[0].physicalLocation.region.startLine // "" | tostring),
+                (.locations[0].physicalLocation.region.endLine // "" | tostring)
+              ] | @csv
+            ' "$sarif_file" >> codeql-frontend-report.csv
+          done
+
+          echo "----------------------------------------"
+          cat codeql-frontend-report.csv
+          echo "----------------------------------------"
+          echo "Total findings: $(($(wc -l < codeql-frontend-report.csv) - 1))"
+
+      - name: Normalize CodeQL findings
+        run: |
+          SARIF_FILES=$(find sarif-downloads -name "*.sarif")
+          python3 scripts/normalize_codeql.py normalized-codeql.json $SARIF_FILES
+
+      - name: Upload CSV report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-frontend-report-${{ github.run_id }}
+          path: codeql-frontend-report.csv
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload normalized findings (for merge job)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: normalized-frontend-codeql
+          path: normalized-codeql.json
+          retention-days: 1
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 5: Merge all 3 tools' normalized findings into ONE file,
+  # in the shared {tool, severity, category, rule_id, message,
+  # file, line, confidence, recommendation} schema. This is what
+  # feeds the AI agent.
+  # ─────────────────────────────────────────────────────────────
+  normalize-and-merge:
+    name: Merge Normalized Findings (Frontend)
+    runs-on: ubuntu-latest
+    needs: [gitguardian-scan, sonarcloud-frontend, codeql-report]
+    if: always()
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code (for scripts/)
+        uses: actions/checkout@v6
+
+      - name: Download all normalized findings
+        uses: actions/download-artifact@v4
+        with:
+          pattern: normalized-frontend-*
+          path: normalized-downloads
+          merge-multiple: true
+
+      - name: Merge into final combined report
+        run: |
+          ls -la normalized-downloads/
+          python3 scripts/merge_findings.py \
+            security-findings-frontend.json \
+            normalized-downloads/normalized-gitguardian.json \
+            normalized-downloads/normalized-sonarcloud.json \
+            normalized-downloads/normalized-codeql.json
+
+      - name: Upload combined findings artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-findings-frontend-${{ github.run_id }}
+          path: security-findings-frontend.json
+          retention-days: 30
+          if-no-files-found: warn
