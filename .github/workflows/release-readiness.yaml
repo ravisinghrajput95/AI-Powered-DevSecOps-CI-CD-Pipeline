@@ -1,0 +1,259 @@
+name: Release Readiness Assessment
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "Commit SHA to assess (defaults to this ref's HEAD if left blank)"
+        required: false
+        type: string
+      run_ai_analysis:
+        description: "Also call the Claude API to generate the full report (costs tokens). Leave unchecked to only build release_context.json for inspection (Phase 1, free)."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GAR_REGION: ${{ secrets.GAR_REGION }}
+  GAR_REPOSITORY_BACKEND: ${{ secrets.GAR_REPOSITORY_BACKEND }}
+  GAR_REPOSITORY_FRONTEND: ${{ secrets.GAR_REPOSITORY_FRONTEND }}
+  BACKEND_IMAGE_NAME: ${{ secrets.BACKEND_IMAGE_NAME }}
+  FRONTEND_IMAGE_NAME: ${{ secrets.FRONTEND_IMAGE_NAME }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  assess:
+    name: Build ReleaseContext and Assess
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Resolve release SHA
+        id: resolve_sha
+        run: |
+          SHA="${{ inputs.release_sha }}"
+          if [ -z "$SHA" ]; then
+            SHA="${{ github.sha }}"
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Assessing commit: $SHA"
+
+      # ── Download artifacts from the four upstream workflows ──────────────
+      - name: Download upstream artifacts
+        id: download
+        env:
+          SHA: ${{ steps.resolve_sha.outputs.sha }}
+        run: |
+          mkdir -p inputs
+
+          find_run_id() {
+            local workflow=$1
+            gh run list --workflow="$workflow" --status=success \
+              --json databaseId,headSha --jq ".[] | select(.headSha == \"$SHA\") | .databaseId" \
+              | head -n1
+          }
+
+          download_or_warn() {
+            local workflow=$1
+            local artifact=$2
+            local run_id
+            run_id=$(find_run_id "$workflow")
+            if [ -z "$run_id" ]; then
+              echo "::warning::No successful run of $workflow found for commit $SHA — skipping artifact '$artifact'."
+              return
+            fi
+            if gh run download "$run_id" -n "$artifact" -D inputs/ 2>/dev/null; then
+              echo "Downloaded '$artifact' from $workflow run $run_id"
+            else
+              echo "::warning::Run $run_id of $workflow succeeded but artifact '$artifact' was not found — it may not have been produced this run."
+            fi
+          }
+
+          # These artifact names are fixed across runs of the same workflow.
+          download_or_warn "backend-ci.yaml" "normalized-snyk-backend"
+          download_or_warn "backend-ci.yaml" "normalized-sbom-backend"
+          download_or_warn "frontend-ci.yaml" "normalized-snyk-frontend"
+          download_or_warn "frontend-ci.yaml" "normalized-sbom-frontend"
+          download_or_warn "app-security-scan-backend.yaml" "scan-status-backend"
+          download_or_warn "app-security-scan-frontend.yaml" "scan-status-frontend"
+
+          # These two artifact names include the producing run's own ID
+          # (e.g. "security-findings-backend-1234567"), so the exact name
+          # has to be built from the run_id we just resolved rather than
+          # being a fixed string.
+          download_with_run_suffix() {
+            local workflow=$1
+            local base_name=$2
+            local run_id
+            run_id=$(find_run_id "$workflow")
+            if [ -z "$run_id" ]; then
+              echo "::warning::No successful run of $workflow found for commit $SHA — skipping '$base_name'."
+              return
+            fi
+            local artifact="${base_name}-${run_id}"
+            if gh run download "$run_id" -n "$artifact" -D inputs/ 2>/dev/null; then
+              echo "Downloaded '$artifact' from $workflow run $run_id"
+            else
+              echo "::warning::Run $run_id of $workflow succeeded but artifact '$artifact' was not found."
+            fi
+          }
+
+          download_with_run_suffix "app-security-scan-backend.yaml" "security-findings-backend"
+          download_with_run_suffix "app-security-scan-frontend.yaml" "security-findings-frontend"
+
+          echo "--- Contents of inputs/ ---"
+          ls -la inputs/ || echo "(nothing downloaded)"
+
+      # ── Live signature verification (not relayed from an earlier job) ────
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          version: ">= 363.0.0"
+
+      - name: Configure Docker for GAR
+        run: gcloud auth configure-docker $GAR_REGION-docker.pkg.dev --quiet
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Verify image signatures
+        id: verify
+        env:
+          SHA: ${{ steps.resolve_sha.outputs.sha }}
+        run: |
+          verify_one() {
+            local component=$1
+            local repo_secret=$2
+            local image_name_secret=$3
+            local workflow_file=$4
+            local image="$GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/${!repo_secret}/${!image_name_secret}:$SHA"
+
+            set +e
+            cosign verify \
+              --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/${workflow_file}@refs/heads/main" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "$image" > "${component}_verify.log" 2>&1
+            echo $? > "${component}_verify_exit.txt"
+            set -e
+          }
+
+          verify_one backend GAR_REPOSITORY_BACKEND BACKEND_IMAGE_NAME backend-ci.yaml
+          verify_one frontend GAR_REPOSITORY_FRONTEND FRONTEND_IMAGE_NAME frontend-ci.yaml
+
+      - name: Build supply_chain.json from verification results
+        run: |
+          python3 - << 'EOF'
+          import json
+
+          def read_exit(path):
+              with open(path) as f:
+                  return int(f.read().strip())
+
+          def read_log(path):
+              with open(path) as f:
+                  return f.read()
+
+          result = {}
+          for component in ("backend", "frontend"):
+              exit_code = read_exit(f"{component}_verify_exit.txt")
+              verified = exit_code == 0
+              # cosign verify's failure mode doesn't cleanly distinguish "never
+              # signed" from "signed but verification failed" without parsing
+              # its error text, which we deliberately don't do here — both
+              # fields move together off the same exit code rather than
+              # claiming precision we don't have.
+              result[component] = {
+                  "image_signed": "unknown" if not verified else True,
+                  "signature_verified": verified,
+                  "verification_notes": "verified" if verified else read_log(f"{component}_verify.log")[-500:],
+              }
+
+          with open("inputs/supply_chain.json", "w") as f:
+              json.dump(result, f, indent=2)
+          print(json.dumps(result, indent=2))
+          EOF
+
+      # ── Merge per-component scan_status files into the combined shape
+      # build_release_context.py expects: {"backend": {...}, "frontend": {...}}.
+      # snyk/syft aren't tracked upstream yet (backend-ci.yaml/frontend-ci.yaml
+      # don't record their own outcomes into a status file), so those two
+      # default to "unknown" here rather than being guessed.
+      - name: Merge scan status
+        run: |
+          python3 - << 'EOF'
+          import json
+
+          ALL_TOOLS = ("codeql", "sonarcloud", "gitguardian", "snyk", "syft")
+
+          def load_or_empty(path):
+              try:
+                  with open(path) as f:
+                      return json.load(f)
+              except FileNotFoundError:
+                  return {}
+
+          backend = {t: "unknown" for t in ALL_TOOLS}
+          backend.update(load_or_empty("inputs/scan_status_backend.json"))
+
+          frontend = {t: "unknown" for t in ALL_TOOLS}
+          frontend.update(load_or_empty("inputs/scan_status_frontend.json"))
+
+          with open("inputs/scan_status.json", "w") as f:
+              json.dump({"backend": backend, "frontend": frontend}, f, indent=2)
+          print(json.dumps({"backend": backend, "frontend": frontend}, indent=2))
+          EOF
+
+      # ── Phase 1: deterministic ReleaseContext build (always runs, free) ──
+      - name: Build ReleaseContext
+        env:
+          SHA: ${{ steps.resolve_sha.outputs.sha }}
+        run: |
+          ARGS=(--output release_context.json --release-version "$SHA" --repository "${{ github.repository }}")
+          [ -f inputs/security-findings-backend.json ] && ARGS+=(--backend-findings inputs/security-findings-backend.json)
+          [ -f inputs/normalized-snyk-backend.json ] && ARGS+=(--backend-snyk inputs/normalized-snyk-backend.json)
+          [ -f inputs/normalized-sbom-backend.json ] && ARGS+=(--backend-sbom inputs/normalized-sbom-backend.json)
+          [ -f inputs/security-findings-frontend.json ] && ARGS+=(--frontend-findings inputs/security-findings-frontend.json)
+          [ -f inputs/normalized-snyk-frontend.json ] && ARGS+=(--frontend-snyk inputs/normalized-snyk-frontend.json)
+          [ -f inputs/normalized-sbom-frontend.json ] && ARGS+=(--frontend-sbom inputs/normalized-sbom-frontend.json)
+          ARGS+=(--supply-chain inputs/supply_chain.json)
+          ARGS+=(--scan-status inputs/scan_status.json)
+          # No --risk-acceptance passed: no exception-tracking system exists yet.
+
+          python3 scripts/build_release_context.py "${ARGS[@]}"
+
+      - name: Upload ReleaseContext
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-context
+          path: release_context.json
+
+      # ── Phase 2: AI analysis — only runs if explicitly requested ─────────
+      - name: Run AI Security Analysis
+        if: ${{ inputs.run_ai_analysis }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python3 scripts/run_security_analysis.py \
+            --release-context release_context.json \
+            --system-prompt scripts/system_prompt.md \
+            --output release_report.md
+
+      - name: Upload AI Security Report
+        if: ${{ inputs.run_ai_analysis }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-security-report
+          path: release_report.md

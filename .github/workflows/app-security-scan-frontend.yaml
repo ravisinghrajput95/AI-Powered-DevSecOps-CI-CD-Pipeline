@@ -323,12 +323,15 @@ jobs:
   # JOB 5: Merge all 3 tools' normalized findings into ONE file,
   # in the shared {tool, severity, category, rule_id, message,
   # file, line, confidence, recommendation} schema. This is what
-  # feeds the AI agent.
+  # feeds the AI agent. Also records each tool's job-level outcome
+  # into scan_status_frontend.json — this is what lets ReleaseContext
+  # distinguish "this tool ran and found nothing" from "this tool
+  # didn't run", instead of defaulting to "unknown" forever.
   # ─────────────────────────────────────────────────────────────
   normalize-and-merge:
     name: Merge Normalized Findings (Frontend)
     runs-on: ubuntu-latest
-    needs: [gitguardian-scan, sonarcloud-frontend, codeql-report]
+    needs: [gitguardian-scan, sonarcloud-frontend, codeql-report, codeql-analyze]
     if: always()
     permissions:
       contents: read
@@ -358,5 +361,28 @@ jobs:
         with:
           name: security-findings-frontend-${{ github.run_id }}
           path: security-findings-frontend.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      # See the equivalent step in app-security-scan-backend.yaml for the
+      # caveat on gitguardian-scan's job-level continue-on-error.
+      - name: Record scan status
+        if: always()
+        run: |
+          cat > scan_status_frontend.json << EOF
+          {
+            "gitguardian": "${{ needs.gitguardian-scan.result }}",
+            "sonarcloud": "${{ needs.sonarcloud-frontend.result }}",
+            "codeql": "${{ needs.codeql-analyze.result }}"
+          }
+          EOF
+          cat scan_status_frontend.json
+
+      - name: Upload scan status
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scan-status-frontend
+          path: scan_status_frontend.json
           retention-days: 30
           if-no-files-found: warn
