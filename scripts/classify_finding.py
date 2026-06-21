@@ -36,6 +36,15 @@ CATEGORY_RULES = [
     # project wrote, so remediation is "upgrade the package", not "fix the code".
     (r"^snyk-|\bcve-\d{4}-\d+\b|vulnerable (?:version|package|dependency|module)|known vulnerabilit", "vulnerable-dependency"),
 
+    # License compliance issues (Snyk Open Source's license scanning). This
+    # category has no clean home in the security|quality|performance|
+    # accessibility type vocabulary — it's a legal/compliance risk, not any
+    # of those. Mapped to "security" below as the closest fit (same
+    # fail-safe reasoning as everywhere else: better to over-include than
+    # bury it), but flagging the taxonomy gap rather than pretending it
+    # fits cleanly.
+    (r"license issue|license violation|license polic|licensing issue", "license-risk"),
+
     # Injection family
     (r"sql-injection|sql query.*user-provided|sql.*injection|injectable sql", "injection"),
     (r"construct the os command|command-line-injection|command line.*user-provided|os command.*user|shell.*injection|command injection", "injection"),
@@ -202,6 +211,7 @@ def classify_confidence(tool, severity):
 TYPE_BY_CATEGORY = {
     "secret-exposure": "security",
     "vulnerable-dependency": "security",
+    "license-risk": "security",
     "injection": "security",
     "path-traversal": "security",
     "ssrf": "security",
@@ -251,6 +261,7 @@ def classify_type(category):
 RECOMMENDATIONS_BY_CATEGORY = {
     "secret-exposure": "Remove the hardcoded credential from source control, rotate it at the provider, and load it from a secret manager or environment variable at runtime.",
     "vulnerable-dependency": "Upgrade the affected package or base image to a patched version. If no fix is available yet, check whether the vulnerable code path is actually reachable in this image and document a time-boxed exception (e.g. a Snyk ignore policy) rather than leaving it unaddressed indefinitely.",
+    "license-risk": "Review this dependency's license against your project's actual license policy. Either replace the dependency with one under an acceptable license, or get explicit sign-off (e.g. from legal) before shipping it — this is a compliance decision, not something to silently ignore.",
     "injection": "Use parameterized queries or an ORM instead of building commands/queries via string concatenation with user input.",
     "path-traversal": "Validate and sanitize user-supplied paths against an allowlist; resolve and confirm the final path stays within an intended base directory.",
     "ssrf": "Validate and allowlist destination hosts/URLs before making outbound requests; never construct request URLs directly from unsanitized user input.",

@@ -206,6 +206,15 @@ def group_findings(findings, remediation_guide):
                 "remediation_notes": [],
                 "original_severities": [],
             }
+            # Present only for findings that carry them (currently Snyk).
+            # rule_id already uniquely identifies a specific package for
+            # Snyk's ID scheme, so these are consistent across every member
+            # of a group — taken once from the first occurrence, not
+            # collected as a list the way original_severity is.
+            if f.get("package_name"):
+                groups[key]["package_name"] = f["package_name"]
+            if f.get("package_version"):
+                groups[key]["package_version"] = f["package_version"]
             order.append(key)
 
         g = groups[key]
@@ -312,6 +321,53 @@ def compute_release_statistics(findings):
     }
 
 
+SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "informational": 0}
+
+
+def compute_dependency_summary(findings):
+    """SCA-specific summary, distinct from sbom_summary (which covers the
+    built image's FULL package inventory via Syft, vulnerable or not).
+    This covers only packages SCA actually flagged.
+
+    Deliberately omits two fields from the original spec:
+    - total_dependencies: needs Snyk's top-level `dependencyCount`, which
+      normalize_snyk.py doesn't currently capture (it only extracts the
+      vulnerabilities[] array, not the report's top-level metadata).
+    - license_summary: pending a real `snyk test` run to confirm the exact
+      license field shape — normalize_snyk.py's license detection is
+      itself unvalidated against real output yet (see its docstring).
+    Shipping a smaller, correct summary now rather than fabricating these
+    two from data that isn't actually there.
+
+    ecosystem_breakdown is omitted entirely — sbom_summary already covers
+    this per-component, and the spec explicitly says not to duplicate it.
+    """
+    snyk_findings = [f for f in findings if f.get("tool") == "snyk" and f.get("package_name")]
+
+    packages = {}
+    for f in snyk_findings:
+        pkg_key = f"{f['package_name']}@{f.get('package_version', 'unknown')}"
+        entry = packages.setdefault(pkg_key, {"package": pkg_key, "severity": f["severity"], "finding_count": 0})
+        if SEVERITY_RANK.get(f["severity"], 0) > SEVERITY_RANK.get(entry["severity"], 0):
+            entry["severity"] = f["severity"]
+        entry["finding_count"] += f.get("occurrence_count", 1)
+
+    critical_count = sum(1 for p in packages.values() if p["severity"] == "critical")
+    high_count = sum(1 for p in packages.values() if p["severity"] == "high")
+
+    top_vulnerable = sorted(
+        packages.values(),
+        key=lambda p: (-SEVERITY_RANK.get(p["severity"], 0), -p["finding_count"]),
+    )[:5]
+
+    return {
+        "vulnerable_dependencies": len(packages),
+        "critical_dependencies": critical_count,
+        "high_dependencies": high_count,
+        "top_vulnerable_packages": top_vulnerable,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", required=True)
@@ -393,7 +449,7 @@ def main():
         )
 
     default_scan_status = {
-        component: {tool: "not_configured" for tool in ("codeql", "sonarcloud", "gitguardian", "snyk", "syft")}
+        component: {tool: "not_configured" for tool in ("codeql", "sonarcloud", "gitguardian", "snyk", "snyk_sca", "syft")}
         for component in ("backend", "frontend")
     }
     default_scan_status["deployed-app"] = {"zap": "not_configured"}
@@ -428,6 +484,11 @@ def main():
         "internet_exposure": "not_collected",
     }
 
+    dependency_summary = {
+        "backend": compute_dependency_summary([f for f in grouped_findings if f.get("component") == "backend"]),
+        "frontend": compute_dependency_summary([f for f in grouped_findings if f.get("component") == "frontend"]),
+    }
+
     release_context = {
         "release": {
             "version": args.release_version,
@@ -438,6 +499,7 @@ def main():
         "findings": grouped_findings,
         "remediation_guide": remediation_guide,
         "sbom_summary": sbom_summary,
+        "dependency_summary": dependency_summary,
         "supply_chain": supply_chain,
         "risk_acceptance": risk_acceptance,
         "scan_status": scan_status,

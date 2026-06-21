@@ -177,6 +177,55 @@ jobs:
           if-no-files-found: warn
 
   # ─────────────────────────────────────────────────────────────
+  # JOB 2b: Snyk SCA — manifest-level scan of requirements.txt,
+  # distinct from the container-image scan in backend-ci.yaml.
+  # Same underlying tool/JSON shape (normalize_snyk.py handles
+  # both), different scope: this catches issues pre-build, against
+  # the dependency manifest itself, not the built image.
+  # ─────────────────────────────────────────────────────────────
+  snyk-sca-backend:
+    name: Snyk SCA (Backend)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@master
+
+      - name: Scan dependencies with Snyk
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          set +e
+          snyk test \
+            --file=backend/requirements.txt \
+            --package-manager=pip \
+            --json-file-output=snyk-sca-backend.json
+          exit_code=$?
+          set -e
+          case $exit_code in
+            0) echo "Snyk SCA: no vulnerabilities found." ;;
+            1) echo "Snyk SCA: vulnerabilities found (report-only, not blocking)." ;;
+            *) echo "::warning::Snyk SCA did not complete cleanly (exit code $exit_code) — check the log above. The report may be missing or incomplete." ;;
+          esac
+          exit 0
+
+      - name: Normalize Snyk SCA findings
+        if: always()
+        run: python3 scripts/normalize_snyk.py normalized-snyk-sca.json snyk-sca-backend.json
+
+      - name: Upload normalized findings (for merge job)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: normalized-backend-snyk-sca
+          path: normalized-snyk-sca.json
+          retention-days: 1
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────
   # JOB 3: CodeQL analysis — python + actions languages only
   # ─────────────────────────────────────────────────────────────
   codeql-analyze:
@@ -320,7 +369,7 @@ jobs:
   normalize-and-merge:
     name: Merge Normalized Findings (Backend)
     runs-on: ubuntu-latest
-    needs: [gitguardian-scan, sonarcloud-backend, codeql-report, codeql-analyze]
+    needs: [gitguardian-scan, sonarcloud-backend, snyk-sca-backend, codeql-report, codeql-analyze]
     if: always()
     permissions:
       contents: read
@@ -343,7 +392,8 @@ jobs:
             security-findings-backend.json \
             normalized-downloads/normalized-gitguardian.json \
             normalized-downloads/normalized-sonarcloud.json \
-            normalized-downloads/normalized-codeql.json
+            normalized-downloads/normalized-codeql.json \
+            normalized-downloads/normalized-snyk-sca.json
 
       - name: Upload combined findings artifact
         uses: actions/upload-artifact@v4
@@ -381,12 +431,14 @@ jobs:
           GITGUARDIAN_STATUS=$(normalize_result "${{ needs.gitguardian-scan.result }}")
           SONARCLOUD_STATUS=$(normalize_result "${{ needs.sonarcloud-backend.result }}")
           CODEQL_STATUS=$(normalize_result "${{ needs.codeql-analyze.result }}")
+          SNYK_SCA_STATUS=$(normalize_result "${{ needs.snyk-sca-backend.result }}")
 
           cat > scan_status_backend.json << EOF
           {
             "gitguardian": "$GITGUARDIAN_STATUS",
             "sonarcloud": "$SONARCLOUD_STATUS",
-            "codeql": "$CODEQL_STATUS"
+            "codeql": "$CODEQL_STATUS",
+            "snyk_sca": "$SNYK_SCA_STATUS"
           }
           EOF
           cat scan_status_backend.json

@@ -230,14 +230,16 @@ jobs:
           import json
           import os
 
-          # codeql/sonarcloud/gitguardian are what app-security-scan-*.yaml
-          # actually tracks; snyk/syft aren't instrumented there at all
-          # (they're reported from backend-ci.yaml/frontend-ci.yaml instead,
-          # which doesn't write a scan-status file yet) — these are two
-          # different kinds of "we don't know": one because this release's
-          # scan never ran, one because nothing has ever recorded this
-          # tool's status regardless of release.
-          TRACKED_BY_SECURITY_SCAN = ("codeql", "sonarcloud", "gitguardian")
+          # codeql/sonarcloud/gitguardian/snyk_sca are what
+          # app-security-scan-*.yaml actually tracks. "snyk" here means the
+          # CONTAINER scan's status specifically (a different key from
+          # snyk_sca) — still not instrumented, since that status comes from
+          # backend-ci.yaml/frontend-ci.yaml, which doesn't write a
+          # scan-status file yet. Same for syft. Two different kinds of "we
+          # don't know": one because this release's scan never ran, one
+          # because nothing has ever recorded this tool's status regardless
+          # of release.
+          TRACKED_BY_SECURITY_SCAN = ("codeql", "sonarcloud", "gitguardian", "snyk_sca")
           NOT_INSTRUMENTED = ("snyk", "syft")
 
           def build_component_status(status_path):
