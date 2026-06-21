@@ -146,10 +146,11 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_BACKEND }}
         with:
           args: >
             -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}
+            -Dsonar.projectKey=cloudcart-backend
             -Dsonar.sources=backend
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/uploads/**
 
@@ -160,11 +161,11 @@ jobs:
       # ─────────────────────────────────────────────────────────
       - name: Fetch and normalize SonarCloud issues
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_BACKEND }}
         run: |
           python3 scripts/fetch_sonarcloud_issues.py \
             normalized-sonarcloud.json \
-            cloudcart \
+            cloudcart-backend \
             "$SONAR_TOKEN" \
             .scannerwork/report-task.txt
 
