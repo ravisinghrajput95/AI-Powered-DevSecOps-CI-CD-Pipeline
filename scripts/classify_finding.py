@@ -156,6 +156,53 @@ def classify_confidence(tool, severity):
 
 
 # ─────────────────────────────────────────────────────────────────
+# TYPE: coarse classification of *what kind* of finding this is,
+# independent of severity. Lets a consumer filter to "security only"
+# without maintaining a separate allowlist of category names, and
+# keeps a tool's native severity (e.g. SonarCloud's MEDIUM/BLOCKER)
+# from being mistaken for a security-relevance signal — severity and
+# type are orthogonal (a BLOCKER-severity prop-types warning is still
+# a quality issue, not a security one).
+# ─────────────────────────────────────────────────────────────────
+TYPE_BY_CATEGORY = {
+    "secret-exposure": "security",
+    "injection": "security",
+    "path-traversal": "security",
+    "ssrf": "security",
+    "client-side-request-forgery": "security",
+    "xss": "security",
+    "csrf": "security",
+    "xxe": "security",
+    "insecure-deserialization": "security",
+    "insecure-crypto": "security",
+    "insecure-tls": "security",
+    "info-disclosure": "security",
+    "debug-enabled": "security",
+    "ci-misconfiguration": "security",
+    "container-misconfiguration": "security",
+    "dependency-pinning": "security",
+    "network-exposure": "security",
+    "cors-misconfiguration": "security",
+    "http-method-misconfiguration": "security",
+    "code-quality": "quality",
+    "react-props-validation": "quality",
+    "accessibility": "accessibility",
+    "react-performance": "performance",
+}
+
+# Fail-safe default for "uncategorized" (and any category someone adds to
+# CATEGORY_RULES/RECOMMENDATIONS_BY_CATEGORY but forgets to add here):
+# treat it as security rather than silently dropping it from a
+# security-filtered view. Better to over-include an unclassified finding
+# than to hide a potential real vulnerability behind a missing mapping.
+DEFAULT_TYPE = "security"
+
+
+def classify_type(category):
+    return TYPE_BY_CATEGORY.get(category, DEFAULT_TYPE)
+
+
+# ─────────────────────────────────────────────────────────────────
 # RECOMMENDATION: short, generic fix-it text keyed by category.
 # Intentionally generic (category-level, not rule-specific) since
 # rule-specific remediation text would require a much larger mapping
@@ -204,8 +251,16 @@ def build_line_field(start_line, end_line):
 
 
 def classify(tool, severity, rule_id, message):
-    """Convenience wrapper returning (category, confidence, recommendation)."""
+    """Convenience wrapper returning (category, type_, confidence, recommendation).
+
+    BREAKING CHANGE: this now returns a 4-tuple instead of 3 (added
+    `type_` as the second element). Any normalizer doing
+    `category, confidence, recommendation = classify(...)` needs to be
+    updated to `category, type_, confidence, recommendation = classify(...)`
+    and to add a `"type": type_` key to its output dict.
+    """
     category = classify_category(rule_id, message)
+    type_ = classify_type(category)
     confidence = classify_confidence(tool, severity)
     recommendation = classify_recommendation(category)
-    return category, confidence, recommendation
+    return category, type_, confidence, recommendation
