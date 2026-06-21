@@ -147,35 +147,84 @@ jobs:
            ./backend
 
       # Report-only, matching GitGuardian's warn-only philosophy elsewhere in
-      # this pipeline: a critical CVE in a base image doesn't block the push,
-      # but it is surfaced as a downloadable SARIF report for visibility.
+      # this pipeline: a critical CVE in a base image doesn't block the push.
+      # Runs the Snyk CLI directly (rather than the snyk/actions/docker
+      # wrapper action) for full control over JSON report generation —
+      # the wrapper's SARIF output proved unreliable.
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@master
+
       - name: Scan image with Snyk
-        continue-on-error: true
-        uses: snyk/actions/docker@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: ${{ env.GAR_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY_BACKEND }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
-          args: --file=backend/Dockerfile --severity-threshold=critical --sarif-file-output=snyk-backend.sarif
+        run: |
+          set +e
+          snyk container test \
+            $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:${{ github.sha }} \
+            --file=backend/Dockerfile \
+            --severity-threshold=critical \
+            --json-file-output=snyk-backend.json
+          exit_code=$?
+          set -e
+          case $exit_code in
+            0) echo "Snyk scan: no vulnerabilities at or above the threshold." ;;
+            1) echo "Snyk scan: vulnerabilities found (report-only, not blocking push)." ;;
+            *) echo "::warning::Snyk scan did not complete cleanly (exit code $exit_code) — check the log above. The report may be missing or incomplete." ;;
+          esac
+          exit 0
 
       - name: Upload Snyk scan report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: snyk-backend-report
-          path: snyk-backend.sarif
+          path: snyk-backend.json
+          if-no-files-found: ignore
+
+      - name: Normalize Snyk findings
+        if: always()
+        run: python3 scripts/normalize_snyk.py normalized-snyk-backend.json snyk-backend.json
+
+      - name: Upload normalized Snyk findings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: normalized-snyk-backend
+          path: normalized-snyk-backend.json
           if-no-files-found: ignore
 
       # Scans the same local (pre-push) image — no registry auth needed, since
       # the Docker daemon already has it loaded from the build step above.
-      # Uploaded as a workflow artifact automatically by the action.
+      # upload-artifact: false because the action's own built-in uploader
+      # needs `contents: write`, which this job intentionally doesn't grant —
+      # uploading explicitly below instead, same pattern as the Snyk report.
       - name: Generate SBOM with Syft
         uses: anchore/sbom-action@v0
         with:
           image: ${{ env.GAR_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY_BACKEND }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
           format: spdx-json
           output-file: sbom-backend.spdx.json
-          artifact-name: sbom-backend.spdx.json
+          upload-artifact: false
+
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-backend
+          path: sbom-backend.spdx.json
+          if-no-files-found: ignore
+
+      - name: Normalize SBOM
+        if: always()
+        run: python3 scripts/normalize_sbom.py normalized-sbom-backend.json sbom-backend.spdx.json backend
+
+      - name: Upload normalized SBOM
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: normalized-sbom-backend
+          path: normalized-sbom-backend.json
+          if-no-files-found: ignore
 
       - name: Push Docker image
         run: |

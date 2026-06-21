@@ -28,6 +28,14 @@ CATEGORY_RULES = [
     # Secrets / credentials — covers all 3 tools' own secret detectors
     (r"secret|password|api[_-]?key|credential|hard-?coded credential|stripe|username password|compromised|hard-?coded secret|access[_-]?key|private[_-]?key|auth[_-]?token|bearer token", "secret-exposure"),
 
+    # Known CVEs in OS packages / language dependencies, as reported by
+    # container/SCA scanners (e.g. Snyk's rule_ids look like
+    # "SNYK-DEBIAN12-OPENSSL-1234567" or "SNYK-JS-LODASH-1018905"). Distinct
+    # from the source-code-pattern categories below: these are pre-existing
+    # known vulnerabilities in third-party code, not a pattern in code this
+    # project wrote, so remediation is "upgrade the package", not "fix the code".
+    (r"^snyk-|\bcve-\d{4}-\d+\b|vulnerable (?:version|package|dependency|module)|known vulnerabilit", "vulnerable-dependency"),
+
     # Injection family
     (r"sql-injection|sql query.*user-provided|sql.*injection|injectable sql", "injection"),
     (r"construct the os command|command-line-injection|command line.*user-provided|os command.*user|shell.*injection|command injection", "injection"),
@@ -143,6 +151,16 @@ CODEQL_LEVEL_CONFIDENCE = {
                           # so this is not downgraded to "low" by default.
 }
 
+# Snyk: native CLI JSON output (`snyk container test --json-file-output`)
+# uses its own severity vocabulary (low/medium/high/critical), distinct
+# from CodeQL's SARIF "level" field — do not conflate the two.
+SNYK_SEVERITY_CONFIDENCE = {
+    "critical": "high",
+    "high": "high",
+    "medium": "medium",
+    "low": "low",
+}
+
 
 def classify_confidence(tool, severity):
     sev = (severity or "").lower()
@@ -152,6 +170,8 @@ def classify_confidence(tool, severity):
         return SONARCLOUD_SEVERITY_CONFIDENCE.get(sev, "medium")
     if tool == "codeql":
         return CODEQL_LEVEL_CONFIDENCE.get(sev, "medium")
+    if tool == "snyk":
+        return SNYK_SEVERITY_CONFIDENCE.get(sev, "medium")
     return "medium"
 
 
@@ -166,6 +186,7 @@ def classify_confidence(tool, severity):
 # ─────────────────────────────────────────────────────────────────
 TYPE_BY_CATEGORY = {
     "secret-exposure": "security",
+    "vulnerable-dependency": "security",
     "injection": "security",
     "path-traversal": "security",
     "ssrf": "security",
@@ -210,6 +231,7 @@ def classify_type(category):
 # ─────────────────────────────────────────────────────────────────
 RECOMMENDATIONS_BY_CATEGORY = {
     "secret-exposure": "Remove the hardcoded credential from source control, rotate it at the provider, and load it from a secret manager or environment variable at runtime.",
+    "vulnerable-dependency": "Upgrade the affected package or base image to a patched version. If no fix is available yet, check whether the vulnerable code path is actually reachable in this image and document a time-boxed exception (e.g. a Snyk ignore policy) rather than leaving it unaddressed indefinitely.",
     "injection": "Use parameterized queries or an ORM instead of building commands/queries via string concatenation with user input.",
     "path-traversal": "Validate and sanitize user-supplied paths against an allowlist; resolve and confirm the final path stays within an intended base directory.",
     "ssrf": "Validate and allowlist destination hosts/URLs before making outbound requests; never construct request URLs directly from unsanitized user input.",
