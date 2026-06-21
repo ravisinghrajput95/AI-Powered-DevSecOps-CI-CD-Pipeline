@@ -108,6 +108,26 @@ jobs:
           download_with_run_suffix "app-security-scan-backend.yaml" "security-findings-backend"
           download_with_run_suffix "app-security-scan-frontend.yaml" "security-findings-frontend"
 
+          # DAST is fundamentally different from the four above: it's not
+          # triggered by a commit at all (workflow_dispatch only, scans
+          # whatever's currently deployed). There's no SHA to match against,
+          # so rather than forcing a correlation that doesn't exist, this
+          # grabs the most recent successful run and records exactly when it
+          # happened — staleness becomes visible data in ReleaseContext,
+          # not a hidden assumption that the result is fresh.
+          DAST_RUN_ID=$(gh run list --workflow="dast-scan.yml" --status=success \
+            --json databaseId --jq '.[0].databaseId')
+
+          if [ -z "$DAST_RUN_ID" ]; then
+            echo "::warning::No successful dast-scan.yml run found at all — deployed-app findings will be absent from ReleaseContext."
+          elif gh run download "$DAST_RUN_ID" -n "normalized-zap" -D inputs/ 2>/dev/null; then
+            SCANNED_AT=$(gh run view "$DAST_RUN_ID" --json createdAt --jq '.createdAt')
+            printf '{"run_id": "%s", "scanned_at": "%s"}' "$DAST_RUN_ID" "$SCANNED_AT" > inputs/dast_metadata.json
+            echo "Downloaded DAST findings from run $DAST_RUN_ID (scanned at $SCANNED_AT)"
+          else
+            echo "::warning::Found a successful dast-scan.yml run ($DAST_RUN_ID) but its 'normalized-zap' artifact wasn't found."
+          fi
+
           echo "--- Contents of inputs/ ---"
           ls -la inputs/ || echo "(nothing downloaded)"
 
@@ -228,6 +248,8 @@ jobs:
           [ -f inputs/security-findings-frontend.json ] && ARGS+=(--frontend-findings inputs/security-findings-frontend.json)
           [ -f inputs/normalized-snyk-frontend.json ] && ARGS+=(--frontend-snyk inputs/normalized-snyk-frontend.json)
           [ -f inputs/normalized-sbom-frontend.json ] && ARGS+=(--frontend-sbom inputs/normalized-sbom-frontend.json)
+          [ -f inputs/normalized-zap.json ] && ARGS+=(--dast-findings inputs/normalized-zap.json)
+          [ -f inputs/dast_metadata.json ] && ARGS+=(--dast-metadata inputs/dast_metadata.json)
           ARGS+=(--supply-chain inputs/supply_chain.json)
           ARGS+=(--scan-status inputs/scan_status.json)
           # No --risk-acceptance passed: no exception-tracking system exists yet.

@@ -237,6 +237,8 @@ def main():
     parser.add_argument("--frontend-findings")
     parser.add_argument("--frontend-snyk")
     parser.add_argument("--frontend-sbom")
+    parser.add_argument("--dast-findings")
+    parser.add_argument("--dast-metadata")
     parser.add_argument("--supply-chain")
     parser.add_argument("--risk-acceptance")
     parser.add_argument("--scan-status")
@@ -252,6 +254,41 @@ def main():
     frontend_findings, frontend_snyk = build_component_findings("frontend", args.frontend_findings, args.frontend_snyk)
     all_findings.extend(frontend_findings)
     sbom_summary["frontend"] = build_component_sbom(args.frontend_sbom, frontend_snyk)
+
+    # DAST gets its own component value rather than "backend" or "frontend".
+    # ZAP tests the live, deployed app as a whole — it doesn't (and can't)
+    # assert which code component is responsible for a given finding; that
+    # static-asset URLs happened to be what this particular crawl found is
+    # incidental to this run, not something ZAP's data actually claims.
+    # Tagging these as "frontend" would be exactly the kind of inferred
+    # attribution this builder is supposed to avoid.
+    dast_findings = load_json(args.dast_findings, [])
+    all_findings.extend(tag_findings(dast_findings, "deployed-app"))
+
+    # Deterministic staleness calculation — DAST isn't tied to a commit the
+    # way the other tools are, so there's no "is this the right version"
+    # check possible, only "how old is this data". Computing that here means
+    # the analyst prompt receives a fact, not raw timestamps it would
+    # otherwise have to subtract itself.
+    dast_metadata_raw = load_json(args.dast_metadata, None)
+    dast_scan_metadata = None
+    if dast_metadata_raw:
+        scanned_at_str = dast_metadata_raw.get("scanned_at")
+        try:
+            scanned_at = datetime.fromisoformat(scanned_at_str.replace("Z", "+00:00"))
+            days_stale = (datetime.now(timezone.utc) - scanned_at).days
+        except (TypeError, ValueError):
+            days_stale = None
+        dast_scan_metadata = {
+            "run_id": dast_metadata_raw.get("run_id"),
+            "scanned_at": scanned_at_str,
+            "days_stale": days_stale,
+        }
+    elif dast_findings:
+        # Findings exist but no metadata was provided (e.g. builder run
+        # locally with just --dast-findings) — say so explicitly rather
+        # than implying freshness by omission.
+        dast_scan_metadata = {"run_id": None, "scanned_at": None, "days_stale": "unknown"}
 
     remediation_guide = {}
     grouped_findings = group_findings(all_findings, remediation_guide)
@@ -273,7 +310,15 @@ def main():
         component: {tool: "unknown" for tool in ("codeql", "sonarcloud", "gitguardian", "snyk", "syft")}
         for component in ("backend", "frontend")
     }
+    default_scan_status["deployed-app"] = {"zap": "unknown"}
     scan_status = load_json(args.scan_status, default_scan_status)
+    # Guaranteed present regardless of whether a passed-in --scan-status file
+    # already accounts for it — release-readiness.yml's own scan-status merge
+    # step doesn't know about DAST yet (it's a separate, on-demand workflow
+    # not tied to a commit SHA the way the others are), so without this,
+    # "deployed-app" would be silently absent rather than honestly "unknown"
+    # whenever a real --scan-status file is passed.
+    scan_status.setdefault("deployed-app", {"zap": "unknown"})
     if not args.scan_status:
         print(
             "NOTE: no --scan-status file provided. Every tool's scan_status will be "
@@ -301,7 +346,7 @@ def main():
         "release": {
             "version": args.release_version,
             "repository": args.repository,
-            "components": ["backend", "frontend"],
+            "components": ["backend", "frontend", "deployed-app"],
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
         "findings": grouped_findings,
@@ -311,6 +356,7 @@ def main():
         "risk_acceptance": risk_acceptance,
         "scan_status": scan_status,
         "signal_availability": signal_availability,
+        "dast_scan_metadata": dast_scan_metadata,
     }
 
     with open(args.output, "w") as f:
