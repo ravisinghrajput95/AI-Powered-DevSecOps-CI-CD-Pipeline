@@ -1,158 +1,94 @@
 #!/usr/bin/env python3
 """
-Normalizes kube-linter's JSON output into the shared schema:
-{tool, severity, category, type, rule_id, message, file, line, confidence, recommendation}
+Assembles an InfraContext object from kube-linter (and kubeconform's
+pass/fail gate) for the same Phase 2 AI analysis as ReleaseContext — kept
+as a SEPARATE script rather than retrofitted into build_release_context.py.
 
-VERIFIED SCHEMA (confirmed via a real working example, 2026-06-22):
-{
-  "Reports": [
-    {
-      "Check": "env-var-secret",
-      "Remediation": "Do not use raw secrets in environment variables...",
-      "Diagnostic": {"Message": "environment variable DB_PASSWORD_SECRET in container \"x\" found"},
-      "Object": {
-        "K8sObject": {
-          "GroupVersionKind": {"Kind": "Deployment"},
-          "Name": "insecure-app",
-          "Namespace": "frontend"
-        },
-        "Metadata": {"FilePath": "..."}
-      }
-    }
-  ]
-}
-A scan with zero findings still produces this structure with an empty
-"Reports" list — that is a normal clean result, not a parsing failure.
+This is the Option A decision: infra is purely additive. Nothing about the
+existing app-sec/runtime ReleaseContext pipeline (release-readiness.yml,
+build_release_context.py's own CLI/output) changes as a result of this.
 
-IMPORTANT DEVIATION FROM EVERY OTHER NORMALIZER IN THIS PIPELINE: kube-linter's
-JSON carries NO per-finding severity field at all. Severity here is an
-inherent property of the CHECK ITSELF (e.g. "privileged-container" is just
-always serious), not something attached to each report instance the way
-Snyk/SonarCloud/ZAP all had. CHECK_NAME_MAPPING below is therefore a direct
-lookup keyed on the stable check name (rule_id), not a regex match against
-free text — check names are kube-linter's own stable identifiers, so this
-is more reliable than text pattern matching, not less.
+Reuses build_release_context.py's already-tool-agnostic functions
+(tag_findings, group_findings, compute_release_statistics) directly via
+import rather than duplicating this logic — the deterministic-preprocessing
+rules (the 3-question test: deterministic? Python better? materially
+improves reasoning?) apply identically regardless of domain, so there's no
+reason for infra to reinvent grouping/severity-normalization/statistics.
 
-UNVALIDATED against this app's real Helm charts — this mapping covers
-kube-linter's well-known default checks based on documentation, but the
-first real scan is what actually confirms it. Any check not in the table
-falls through to the loud "unmatched check" warning below, same pattern as
-every other tool's first pass this session.
-
-`rule_id` is set to the check name (e.g. "privileged-container"), and
-`file` is built from the K8s object's Namespace/Kind/Name, since these are
-rendered manifests, not literal source files with line numbers — `line` is
-always None here.
+KNOWN LIMITATIONS:
+1. kubeconform is treated as a pass/fail validity GATE, not a source of
+   findings — it answers "does this chart render to valid Kubernetes
+   objects" as a fact, not a security judgment. Deliberately not mixed into
+   the findings/severity model, per the design discussion that led here.
+2. No --scan-status merge logic exists yet for a separate infra-readiness.yml
+   orchestrator (unlike release-readiness.yml's SHA-matching download logic)
+   — this script accepts already-prepared input files; the orchestrator
+   workflow is what's responsible for finding and downloading them.
 
 Usage:
-    normalize_kubelinter.py <output.json> <kubelinter_report.json>
+    build_infra_context.py --output infra_context.json \\
+        --release-version <git-sha-or-tag> --repository <owner/repo> \\
+        --kubelinter-findings normalized-kubelinter.json \\
+        [--kubeconform-status kubeconform_status.json] \\
+        [--scan-status scan_status.json]
 """
+import argparse
 import json
 import sys
 import os
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from classify_finding import TYPE_BY_CATEGORY, DEFAULT_TYPE, classify_recommendation
-
-# (severity, category) per check name. Severity here uses this pipeline's
-# already-normalized 5-tier scale directly (critical/high/medium/low/
-# informational) rather than a tool-native string that needs translating —
-# there's no native severity to preserve as original_severity for this tool,
-# since kube-linter doesn't have one.
-CHECK_NAME_MAPPING = {
-    "privileged-container": ("critical", "privileged-container"),
-    "privilege-escalation-container": ("critical", "privilege-escalation"),
-    "host-network": ("critical", "host-namespace-sharing"),
-    "host-ipc": ("critical", "host-namespace-sharing"),
-    "host-pid": ("critical", "host-namespace-sharing"),
-    "run-as-non-root": ("high", "run-as-root"),
-    "env-var-secret": ("high", "secret-in-env-var"),
-    "unsafe-sysctls": ("high", "excessive-capabilities"),
-    "drop-net-raw-capability": ("medium", "excessive-capabilities"),
-    "unset-cpu-requirements": ("medium", "missing-resource-limits"),
-    "unset-memory-requirements": ("medium", "missing-resource-limits"),
-    "no-read-only-root-fs": ("medium", "writable-root-filesystem"),
-    "default-service-account": ("medium", "default-service-account-usage"),
-    "non-existent-service-account": ("medium", "default-service-account-usage"),
-    "latest-tag": ("medium", "mutable-image-tag"),
-    "exposed-services": ("medium", "excessive-exposure"),
-    "ssh-port": ("medium", "excessive-exposure"),
-    "non-isolated-pod": ("medium", "missing-pod-isolation"),
-    "no-liveness-probe": ("low", "missing-health-probe"),
-    "no-readiness-probe": ("low", "missing-health-probe"),
-    "dangling-service": ("low", "missing-pod-isolation"),
-    "required-annotation-email": ("low", "informational-finding"),
-    "mismatching-selector": ("low", "informational-finding"),
-}
-
-
-def normalize_report(report):
-    findings = []
-
-    for r in report.get("Reports", []):
-        check = r.get("Check", "unknown")
-        message = r.get("Diagnostic", {}).get("Message", "")
-        tool_remediation = r.get("Remediation", "")
-
-        k8s_obj = r.get("Object", {}).get("K8sObject", {})
-        kind = k8s_obj.get("GroupVersionKind", {}).get("Kind", "unknown")
-        name = k8s_obj.get("Name", "unknown")
-        namespace = k8s_obj.get("Namespace", "")
-        file_field = f"{namespace}/{kind}/{name}" if namespace else f"{kind}/{name}"
-
-        if check in CHECK_NAME_MAPPING:
-            severity, category = CHECK_NAME_MAPPING[check]
-        else:
-            print(
-                f"WARNING: unmatched kube-linter check {check!r} (message: {message!r}) "
-                f"— add it to CHECK_NAME_MAPPING in normalize_kubelinter.py.",
-                file=sys.stderr,
-            )
-            severity, category = "medium", "uncategorized"
-
-        type_ = TYPE_BY_CATEGORY.get(category, DEFAULT_TYPE)
-        # kube-linter's own remediation text is generally good and specific
-        # (it's written per-check by the tool authors) — prefer it over the
-        # category-level generic guidance where available.
-        recommendation = tool_remediation or classify_recommendation(category)
-
-        findings.append({
-            "tool": "kube-linter",
-            "severity": severity,
-            "category": category,
-            "type": type_,
-            "rule_id": check,
-            "message": message,
-            "file": file_field,
-            "line": None,
-            "confidence": "high",  # static analysis of rendered manifests, not a heuristic guess
-            "recommendation": recommendation,
-        })
-
-    return findings
+from build_release_context import tag_findings, group_findings, compute_release_statistics, load_json
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: normalize_kubelinter.py <output.json> <kubelinter_report.json>", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--release-version", required=True)
+    parser.add_argument("--repository", required=True)
+    parser.add_argument("--kubelinter-findings")
+    parser.add_argument("--kubeconform-status")
+    parser.add_argument("--scan-status")
+    args = parser.parse_args()
 
-    output_path = sys.argv[1]
-    report_path = sys.argv[2]
+    findings = load_json(args.kubelinter_findings, [])
+    tagged = tag_findings(findings, "infrastructure")
 
-    try:
-        with open(report_path) as f:
-            report = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        print(f"WARNING: could not read {report_path}: {e}", file=sys.stderr)
-        report = {}
+    remediation_guide = {}
+    grouped_findings = group_findings(tagged, remediation_guide)
 
-    findings = normalize_report(report)
+    default_scan_status = {"infrastructure": {"kube-linter": "not_configured", "kubeconform": "not_configured"}}
+    scan_status = load_json(args.scan_status, default_scan_status)
+    if not args.scan_status:
+        print(
+            "NOTE: no --scan-status file provided. scan_status will be 'not_configured' "
+            "rather than guessed.",
+            file=sys.stderr,
+        )
 
-    with open(output_path, "w") as f:
-        json.dump(findings, f, indent=2)
+    # Factual pass/fail gate, not a finding — see KNOWN LIMITATIONS above.
+    default_kubeconform = {"valid": "unknown", "error_count": None, "summary": None}
+    schema_validation = load_json(args.kubeconform_status, default_kubeconform)
 
-    print(f"Normalized {len(findings)} kube-linter findings -> {output_path}")
+    infra_context = {
+        "release": {
+            "version": args.release_version,
+            "repository": args.repository,
+            "components": ["infrastructure"],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "findings": grouped_findings,
+        "remediation_guide": remediation_guide,
+        "schema_validation": schema_validation,
+        "scan_status": scan_status,
+        "release_statistics": compute_release_statistics(grouped_findings),
+    }
+
+    with open(args.output, "w") as f:
+        json.dump(infra_context, f, indent=2)
+
+    print(f"Built InfraContext: {len(findings)} raw findings -> {len(grouped_findings)} grouped entries -> {args.output}")
 
 
 if __name__ == "__main__":
