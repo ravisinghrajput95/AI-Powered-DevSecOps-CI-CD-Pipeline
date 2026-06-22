@@ -238,6 +238,24 @@ TYPE_BY_CATEGORY = {
     "insecure-cookie": "security",
     "insecure-caching": "security",
     "informational-finding": "quality",
+
+    # Infrastructure (kube-linter). Populated via direct check-name lookup
+    # in normalize_kubelinter.py, not regex matching — listed here anyway
+    # since remediation_guide/grouping look these up by category name
+    # regardless of how the category was determined.
+    "privileged-container": "security",
+    "run-as-root": "security",
+    "missing-resource-limits": "security",
+    "writable-root-filesystem": "security",
+    "default-service-account-usage": "security",
+    "secret-in-env-var": "security",
+    "missing-health-probe": "quality",
+    "mutable-image-tag": "security",
+    "excessive-exposure": "security",
+    "host-namespace-sharing": "security",
+    "privilege-escalation": "security",
+    "excessive-capabilities": "security",
+    "missing-pod-isolation": "security",
 }
 
 # Fail-safe default for "uncategorized" (and any category someone adds to
@@ -288,6 +306,21 @@ RECOMMENDATIONS_BY_CATEGORY = {
     "insecure-cookie": "Set the Secure and HttpOnly flags on all session/auth cookies, and set SameSite appropriately to reduce CSRF exposure.",
     "insecure-caching": "Set Cache-Control: no-store (and Pragma: no-cache for older clients) on any response containing sensitive or user-specific data; static assets can remain cacheable.",
     "informational-finding": "No action needed — this is an FYI-level observation about the application, not a vulnerability.",
+
+    "privileged-container": "Remove `privileged: true` from the container's securityContext. Privileged containers have unrestricted host access — grant only the specific Linux capabilities actually needed instead.",
+    "run-as-root": "Set `runAsNonRoot: true` (and a non-zero `runAsUser`) in the pod or container securityContext, so the process can't run as root even if the image itself doesn't define a non-root user.",
+    "missing-resource-limits": "Set explicit CPU/memory `requests` and `limits` on every container. Without limits, a single misbehaving pod can exhaust node resources and affect other workloads.",
+    "writable-root-filesystem": "Set `readOnlyRootFilesystem: true` in the container's securityContext, and mount an explicit writable volume for any path that genuinely needs write access.",
+    "default-service-account-usage": "Create a dedicated ServiceAccount for this workload instead of relying on the namespace's default one — this is what makes Workload Identity (or any per-workload IAM binding) possible to scope correctly.",
+    "secret-in-env-var": "Mount the secret as a file or use `secretKeyRef` in an env var's `valueFrom`, rather than a raw secret value directly in the env var — raw values are visible via `kubectl describe pod` and process inspection.",
+    "missing-health-probe": "Add `livenessProbe`/`readinessProbe` so Kubernetes can detect and recover from a hung or not-yet-ready container, instead of routing traffic to it regardless.",
+    "mutable-image-tag": "Pin the image to a specific, immutable tag or digest rather than `:latest` — without this, you can't reliably audit or reproduce exactly what's running.",
+    "excessive-exposure": "Confirm this Service's exposure (NodePort/LoadBalancer) is actually intended for this workload — prefer ClusterIP plus an Ingress/Gateway for anything that doesn't need to be reachable this directly.",
+    "host-namespace-sharing": "Remove `hostNetwork`/`hostPID`/`hostIPC: true` unless this workload genuinely needs direct access to the host's namespaces — sharing them removes the isolation a container is supposed to provide.",
+    "privilege-escalation": "Set `allowPrivilegeEscalation: false` in the container's securityContext, so a process can't gain more privileges than its parent (e.g. via a setuid binary).",
+    "excessive-capabilities": "Drop all Linux capabilities (`drop: [\"ALL\"]`) and add back only the specific ones this container actually needs, rather than keeping the default set.",
+    "missing-pod-isolation": "Add a NetworkPolicy scoping which pods/namespaces can actually reach this workload, rather than leaving it reachable from anything else in the cluster by default.",
+
     "uncategorized": "No automated category match was found for this rule_id/message. Since this codebase's rule_id surface is expected to be fixed and fully mapped, an uncategorized finding likely indicates a gap in classify_finding.py's CATEGORY_RULES rather than genuinely new code — inspect the rule_id below and add a matching pattern.",
 }
 

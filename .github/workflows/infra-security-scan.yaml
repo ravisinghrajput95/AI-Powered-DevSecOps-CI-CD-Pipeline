@@ -1,0 +1,172 @@
+name: Infra Security Scan (kube-linter + kubeconform)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "helm/cloudcart/**"
+      - "helm/postgresql/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  infra-scan:
+    name: Lint and Validate Helm Charts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      # No-op for these two charts today (charts/backend, charts/frontend are
+      # local subdirectories, not .tgz dependencies) — kept as a safety net
+      # in case that ever changes. monitoring/ is deliberately excluded
+      # entirely: it has no Chart.yaml, it's just override values for an
+      # external chart (kube-prometheus-stack), not a deployable chart of
+      # its own — `helm template` can't render it.
+      - name: Helm dependency build (safety net)
+        run: |
+          helm dependency build helm/cloudcart || true
+          helm dependency build helm/postgresql || true
+
+      # Rendered ONCE, here — both kube-linter and kubeconform lint this
+      # same output, rather than each doing its own internal templating.
+      # kube-linter can technically lint Helm charts directly, but using
+      # its own chart-mode could resolve values differently than this
+      # explicit -f call; rendering once and linting the rendered output
+      # is the single-source-of-truth choice.
+      # values.yaml only — confirmed this is what's actually deployed
+      # (deploy-backend.yml/deploy-frontend.yml don't pass values-prod.yaml).
+      - name: Render charts
+        run: |
+          mkdir -p rendered
+          helm template cloudcart helm/cloudcart -f helm/cloudcart/values.yaml > rendered/cloudcart.yaml
+          helm template postgresql helm/postgresql -f helm/postgresql/values.yaml > rendered/postgresql.yaml
+
+      - name: Install kube-linter
+        run: |
+          curl -sL -o kube-linter https://github.com/stackrox/kube-linter/releases/latest/download/kube-linter-linux
+          chmod +x kube-linter
+          sudo mv kube-linter /usr/local/bin/
+
+      - name: Run kube-linter
+        id: kubelinter_run
+        run: |
+          set +e
+          kube-linter lint rendered/ --format json > kubelinter-report.json
+          exit_code=$?
+          set -e
+          case $exit_code in
+            0) echo "kube-linter: no issues found."; echo "status=success" >> "$GITHUB_OUTPUT" ;;
+            1) echo "kube-linter: issues found (report-only, not blocking)."; echo "status=success" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::warning::kube-linter did not complete cleanly (exit code $exit_code) — check the log above. The report may be missing or incomplete."; echo "status=failed" >> "$GITHUB_OUTPUT" ;;
+          esac
+          exit 0
+
+      - name: Upload raw kube-linter report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kubelinter-report
+          path: kubelinter-report.json
+          if-no-files-found: warn
+
+      - name: Normalize kube-linter findings
+        if: always()
+        run: python3 scripts/normalize_kubelinter.py normalized-kubelinter.json kubelinter-report.json
+
+      - name: Upload normalized findings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: normalized-kubelinter
+          path: normalized-kubelinter.json
+          if-no-files-found: warn
+
+      - name: Install kubeconform
+        run: |
+          curl -sL -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+          tar xzf kubeconform.tar.gz kubeconform
+          chmod +x kubeconform
+          sudo mv kubeconform /usr/local/bin/
+          rm kubeconform.tar.gz
+
+      # Schema VALIDITY gate, not a source of findings — deliberately kept
+      # separate from kube-linter's security findings (see the design
+      # discussion: kubeconform answers "does this render to valid
+      # Kubernetes objects", not a security judgment). Exit code is the
+      # reliable signal (0 = valid, non-zero = validation/processing
+      # issues) — not attempting to deeply parse per-error JSON fields,
+      # since this stays a pass/fail fact, not detailed findings.
+      - name: Run kubeconform (schema validity gate)
+        id: kubeconform_run
+        run: |
+          set +e
+          kubeconform -summary -output json rendered/cloudcart.yaml rendered/postgresql.yaml > kubeconform-summary.json
+          exit_code=$?
+          set -e
+          if [ ! -s kubeconform-summary.json ]; then
+            VALID="unknown"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "::warning::kubeconform produced no output at all (exit code $exit_code) — likely a real failure, not a validation result."
+          elif [ "$exit_code" -eq 0 ]; then
+            VALID="true"
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            echo "kubeconform: all rendered manifests are schema-valid."
+          else
+            VALID="false"
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            echo "::warning::kubeconform found schema validation issues (exit code $exit_code) — see kubeconform-summary.json. This is a normal validity-gate result, not a tool failure."
+          fi
+
+          # jq, not an embedded Python heredoc — avoids the multi-line-
+          # string-inside-a-YAML-block-scalar indentation trap.
+          if [ -s kubeconform-summary.json ]; then
+            jq -n --arg valid "$VALID" --slurpfile summary kubeconform-summary.json \
+              '{valid: $valid, summary: $summary[0]}' > kubeconform_status.json
+          else
+            jq -n --arg valid "$VALID" '{valid: $valid, summary: null}' > kubeconform_status.json
+          fi
+          cat kubeconform_status.json
+          exit 0
+
+      - name: Upload kubeconform status
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kubeconform-status
+          path: kubeconform_status.json
+          if-no-files-found: warn
+
+      # Uses the explicit outputs captured above, NOT step outcome — both
+      # scan steps deliberately end with `exit 0` so a tool finding real
+      # issues doesn't fail the job (report-only), which means step outcome
+      # would always read "success" regardless of what actually happened.
+      # Same trap already hit once this session with the Snyk SCA jobs.
+      - name: Record scan status
+        if: always()
+        run: |
+          cat > scan_status_infra.json << EOF
+          {
+            "infrastructure": {
+              "kube-linter": "${{ steps.kubelinter_run.outputs.status || 'skipped' }}",
+              "kubeconform": "${{ steps.kubeconform_run.outputs.status || 'skipped' }}"
+            }
+          }
+          EOF
+          cat scan_status_infra.json
+
+      - name: Upload scan status
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scan-status-infra
+          path: scan_status_infra.json
+          if-no-files-found: warn

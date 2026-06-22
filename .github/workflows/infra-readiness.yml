@@ -1,0 +1,92 @@
+name: Infra Readiness Assessment
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "Commit SHA to assess (defaults to this ref's HEAD if left blank)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build-infra-context:
+    name: Build InfraContext
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Resolve target SHA
+        id: resolve_sha
+        run: |
+          SHA="${{ inputs.release_sha }}"
+          if [ -z "$SHA" ]; then
+            SHA="${{ github.sha }}"
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Assessing commit: $SHA"
+
+      # Resolved by workflow NAME via the Actions API, not by filename via
+      # `gh run list --workflow=<file>.yml` — the latter requires the file
+      # to exist on the default branch under that exact name to resolve at
+      # all, which already caused a real 404 once this session (the DAST
+      # workflow's actual filename didn't match what was assumed). This is
+      # tied to a commit (unlike DAST, which scans a live target and has no
+      # SHA to match against) — so unlike DAST's "grab the latest, record
+      # staleness" approach, this looks for a run matching the exact SHA
+      # being assessed.
+      - name: Download infra scan artifacts
+        id: download
+        env:
+          SHA: ${{ steps.resolve_sha.outputs.sha }}
+        run: |
+          mkdir -p inputs
+
+          INFRA_WORKFLOW_ID=$(gh api "repos/${{ github.repository }}/actions/workflows" \
+            --jq '.workflows[] | select(.name=="Infra Security Scan (kube-linter + kubeconform)") | .id' | head -n1)
+
+          if [ -z "$INFRA_WORKFLOW_ID" ]; then
+            echo "::warning::No workflow named 'Infra Security Scan (kube-linter + kubeconform)' found via the Actions API — infrastructure findings will be absent. Check that infra-security-scan.yaml has been pushed and run at least once, and that its name: field matches exactly."
+          else
+            INFRA_RUN_ID=$(gh run list --workflow="$INFRA_WORKFLOW_ID" --status=success \
+              --json databaseId,headSha --jq ".[] | select(.headSha == \"$SHA\") | .databaseId" | head -n1)
+
+            if [ -z "$INFRA_RUN_ID" ]; then
+              echo "::warning::No successful infra-security-scan run found for commit $SHA — infrastructure findings will be absent. Run infra-security-scan.yaml against this commit first."
+            else
+              for artifact in normalized-kubelinter kubeconform-status scan-status-infra; do
+                if gh run download "$INFRA_RUN_ID" -n "$artifact" -D inputs/ 2>/dev/null; then
+                  echo "Downloaded '$artifact' from run $INFRA_RUN_ID"
+                else
+                  echo "::warning::Run $INFRA_RUN_ID succeeded but artifact '$artifact' was not found."
+                fi
+              done
+            fi
+          fi
+
+          echo "--- Contents of inputs/ ---"
+          ls -la inputs/ || echo "(nothing downloaded)"
+
+      - name: Build InfraContext
+        env:
+          SHA: ${{ steps.resolve_sha.outputs.sha }}
+        run: |
+          ARGS=(--output infra_context.json --release-version "$SHA" --repository "${{ github.repository }}")
+          [ -f inputs/normalized-kubelinter.json ] && ARGS+=(--kubelinter-findings inputs/normalized-kubelinter.json)
+          [ -f inputs/kubeconform_status.json ] && ARGS+=(--kubeconform-status inputs/kubeconform_status.json)
+          [ -f inputs/scan_status_infra.json ] && ARGS+=(--scan-status inputs/scan_status_infra.json)
+
+          python3 scripts/build_infra_context.py "${ARGS[@]}"
+
+      - name: Upload InfraContext
+        uses: actions/upload-artifact@v7
+        with:
+          name: infra-context
+          path: infra_context.json
