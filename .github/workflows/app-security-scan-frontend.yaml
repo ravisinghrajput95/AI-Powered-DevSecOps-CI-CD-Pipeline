@@ -220,17 +220,19 @@ jobs:
         uses: snyk/actions/setup@master
 
       - name: Scan dependencies with Snyk
+        working-directory: frontend
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           set +e
-          # --all-projects scans every supported manifest (package.json AND
-          # package-lock.json), not just one. Mutually exclusive with
-          # --file/--package-manager, so those are dropped. Output becomes a
-          # JSON ARRAY — normalize_snyk.py already handles both shapes.
+          # MUST run from frontend/ — --all-projects walks the entire
+          # checkout recursively, so without this scoping it also picks up
+          # backend/'s requirements.txt and mis-tags those pip findings as
+          # frontend. See the equivalent step in the backend workflow.
+          # Output to workspace root via absolute path so later steps find it.
           snyk test \
             --all-projects \
-            --json-file-output=snyk-sca-frontend.json
+            --json-file-output="$GITHUB_WORKSPACE/snyk-sca-frontend.json"
           exit_code=$?
           set -e
           case $exit_code in
@@ -241,16 +243,16 @@ jobs:
           exit 0
 
       # Portal-visibility side effect only — see the equivalent step in
-      # app-security-scan-backend.yaml for why this is isolated and
-      # non-blocking.
+      # app-security-scan-backend.yaml for why this is isolated, non-blocking,
+      # and scoped to its component directory.
       - name: Report to Snyk portal (monitor, non-blocking)
         continue-on-error: true
+        working-directory: frontend
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           snyk monitor \
             --all-projects \
-            --project-name=cloudcart-frontend \
             || echo "::warning::snyk monitor did not complete — portal snapshot may be stale. This does not affect the scan results or the pipeline."
 
       # See the equivalent step in app-security-scan-backend.yaml for why

@@ -210,19 +210,24 @@ jobs:
         uses: snyk/actions/setup@master
 
       - name: Scan dependencies with Snyk
+        working-directory: backend
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           set +e
-          # --all-projects scans every supported manifest in the repo
-          # (requirements.txt AND any pyproject.toml/setup.py Snyk detects),
-          # not just one. It's mutually exclusive with --file/--package-manager,
-          # so those are dropped. Output becomes a JSON ARRAY (one object per
-          # manifest) instead of a single object — normalize_snyk.py already
-          # handles both shapes.
+          # --all-projects scans every supported manifest, but it walks the
+          # ENTIRE checkout recursively from the working directory — so this
+          # MUST run from backend/, otherwise it also picks up frontend/'s
+          # package.json and tags those npm findings as backend (confirmed
+          # bug from a real run). working-directory scopes it cleanly without
+          # needing --exclude (which can't take paths anyway).
+          # Output written to the workspace root via an absolute path so the
+          # later upload/normalize steps (which don't set working-directory)
+          # still find it. Output is a JSON ARRAY (one object per manifest) —
+          # normalize_snyk.py already handles both shapes.
           snyk test \
             --all-projects \
-            --json-file-output=snyk-sca-backend.json
+            --json-file-output="$GITHUB_WORKSPACE/snyk-sca-backend.json"
           exit_code=$?
           set -e
           case $exit_code in
@@ -237,16 +242,15 @@ jobs:
       # does NOT feed ReleaseContext and must never gate the pipeline, so
       # it's isolated in its own step with `|| true` and continue-on-error:
       # a portal/network hiccup here can't fail the scan or block anything
-      # downstream. --project-name keeps the portal entry stable and
-      # identifiable across runs rather than creating churn.
+      # downstream. Scoped to backend/ for the same reason as the scan above.
       - name: Report to Snyk portal (monitor, non-blocking)
         continue-on-error: true
+        working-directory: backend
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           snyk monitor \
             --all-projects \
-            --project-name=cloudcart-backend \
             || echo "::warning::snyk monitor did not complete — portal snapshot may be stale. This does not affect the scan results or the pipeline."
 
       # Raw report preserved as its own artifact — without this, an empty
