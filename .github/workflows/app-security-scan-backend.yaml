@@ -191,6 +191,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      # Snyk's Python scanning cross-references the manifest against what's
+      # actually pip-installed (Python has no true universal lockfile the
+      # way npm does) — without this, `snyk test` fails outright with
+      # "Missing required packages" rather than scanning anything.
+      - name: Install backend dependencies (required for Snyk to resolve the dependency tree)
+        working-directory: backend
+        run: pip install -r requirements.txt
+
       - name: Install Snyk CLI
         uses: snyk/actions/setup@master
 
