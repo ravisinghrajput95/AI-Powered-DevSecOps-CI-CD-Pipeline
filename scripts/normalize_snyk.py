@@ -81,6 +81,13 @@ def normalize_report(report):
     """Extract normalized findings from a single Snyk JSON report (container
     or SCA/manifest test — same shape either way)."""
     findings = []
+    # Report-level field, same for every vulnerability in this one scan
+    # invocation. This is what actually distinguishes a container scan
+    # ("deb" for this app's Debian-based images) from an SCA manifest scan
+    # ("pip"/"npm") — tool stays "snyk" for both deliberately (see module
+    # docstring), so this field is the real signal anything downstream
+    # should filter on, not the tool name.
+    package_manager = report.get("packageManager")
 
     for vuln in report.get("vulnerabilities", []):
         rule_id = vuln.get("id", "unknown")
@@ -129,6 +136,8 @@ def normalize_report(report):
             finding["package_name"] = package_name
         if package_version:
             finding["package_version"] = package_version
+        if package_manager:
+            finding["package_manager"] = package_manager
 
         findings.append(finding)
 

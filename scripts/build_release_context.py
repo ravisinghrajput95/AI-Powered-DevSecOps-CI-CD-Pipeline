@@ -215,6 +215,8 @@ def group_findings(findings, remediation_guide):
                 groups[key]["package_name"] = f["package_name"]
             if f.get("package_version"):
                 groups[key]["package_version"] = f["package_version"]
+            if f.get("package_manager"):
+                groups[key]["package_manager"] = f["package_manager"]
             order.append(key)
 
         g = groups[key]
@@ -342,7 +344,22 @@ def compute_dependency_summary(findings):
     ecosystem_breakdown is omitted entirely — sbom_summary already covers
     this per-component, and the spec explicitly says not to duplicate it.
     """
-    snyk_findings = [f for f in findings if f.get("tool") == "snyk" and f.get("package_name")]
+    # Filtered by package_manager, NOT just tool=="snyk" — container scans
+    # and SCA manifest scans both deliberately report tool:"snyk" (see
+    # normalize_snyk.py's docstring on why), so tool alone can't separate
+    # them. package_manager is the real, deterministic signal Snyk itself
+    # reports: "deb" for this app's container scans, "pip"/"npm" for its
+    # two SCA manifests. Confirmed against a real run where container-scan
+    # OS packages (krb5, zlib, openssl, etc.) were incorrectly appearing
+    # here before this filter existed. If more manifest ecosystems are
+    # ever added (e.g. poetry, yarn), extend this allowlist.
+    APPLICATION_PACKAGE_MANAGERS = ("pip", "npm")
+    snyk_findings = [
+        f for f in findings
+        if f.get("tool") == "snyk"
+        and f.get("package_name")
+        and f.get("package_manager") in APPLICATION_PACKAGE_MANAGERS
+    ]
 
     packages = {}
     for f in snyk_findings:
