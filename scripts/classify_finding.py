@@ -256,6 +256,7 @@ TYPE_BY_CATEGORY = {
     "privilege-escalation": "security",
     "excessive-capabilities": "security",
     "missing-pod-isolation": "security",
+    "job-lifecycle": "quality",
 }
 
 # Fail-safe default for "uncategorized" (and any category someone adds to
@@ -320,6 +321,7 @@ RECOMMENDATIONS_BY_CATEGORY = {
     "privilege-escalation": "Set `allowPrivilegeEscalation: false` in the container's securityContext, so a process can't gain more privileges than its parent (e.g. via a setuid binary).",
     "excessive-capabilities": "Drop all Linux capabilities (`drop: [\"ALL\"]`) and add back only the specific ones this container actually needs, rather than keeping the default set.",
     "missing-pod-isolation": "Add a NetworkPolicy scoping which pods/namespaces can actually reach this workload, rather than leaving it reachable from anything else in the cluster by default.",
+    "job-lifecycle": "Set `spec.ttlSecondsAfterFinished` on Jobs so completed/failed Job objects (and their pods) are automatically cleaned up instead of accumulating indefinitely in the cluster.",
 
     "uncategorized": "No automated category match was found for this rule_id/message. Since this codebase's rule_id surface is expected to be fixed and fully mapped, an uncategorized finding likely indicates a gap in classify_finding.py's CATEGORY_RULES rather than genuinely new code — inspect the rule_id below and add a matching pattern.",
 }

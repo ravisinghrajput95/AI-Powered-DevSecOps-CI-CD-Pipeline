@@ -83,6 +83,10 @@ CHECK_NAME_MAPPING = {
     "dangling-service": ("low", "missing-pod-isolation"),
     "required-annotation-email": ("low", "informational-finding"),
     "mismatching-selector": ("low", "informational-finding"),
+    # Confirmed from a real scan of this app's charts — not in the original
+    # documentation-based table. Job hygiene (cleanup), not a direct
+    # security risk, hence "quality" not "security" and low severity.
+    "job-ttl-seconds-after-finished": ("low", "job-lifecycle"),
 }
 
 

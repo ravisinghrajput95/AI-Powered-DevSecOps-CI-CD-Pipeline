@@ -96,6 +96,12 @@ SEVERITY_NORMALIZATION = {
     "gitguardian": {"valid": "critical", "invalid": "low", "no_checker": "medium", "unknown": "medium", "failed_to_check": "medium"},
     "snyk": {"critical": "critical", "high": "high", "medium": "medium", "low": "low"},
     "zap": {"high": "high", "medium": "medium", "low": "low", "informational": "informational"},
+    # kube-linter has no native per-finding severity at all (see
+    # normalize_kubelinter.py's docstring) — its normalizer assigns severity
+    # directly from a check-name lookup, already in this scale. Identity
+    # mapping here so tag_findings' normalize_severity call doesn't flag
+    # every kube-linter finding as "unrecognized" and default it to medium.
+    "kube-linter": {"critical": "critical", "high": "high", "medium": "medium", "low": "low", "informational": "informational"},
 }
 
 
@@ -178,18 +184,31 @@ def extract_remediation_note(finding, remediation_guide):
 
 
 def group_findings(findings, remediation_guide):
-    """Collapse findings sharing (component, tool, rule_id, severity,
-    category) into one entry with occurrence_count + locations. This is the
-    automatic grouping/summarization mechanism: it runs unconditionally, so
-    a single occurrence becomes a group of one and a hundred occurrences
-    become one compact entry — no finding-count threshold to tune."""
+    """Collapse findings sharing (component, tool, rule_id, category) into
+    one entry with occurrence_count + locations. This is the automatic
+    grouping/summarization mechanism: it runs unconditionally, so a single
+    occurrence becomes a group of one and a hundred occurrences become one
+    compact entry — no finding-count threshold to tune.
+
+    Severity is deliberately NOT part of the grouping key (changed from an
+    earlier version where it was) — instead, a group's reported severity is
+    the deterministic MAX across every occurrence folded into it, using
+    SEVERITY_RANK's fixed ordering (critical > high > medium > low >
+    informational). Never averaged, voted, or inferred. This means the
+    same rule_id reported at varying severity across instances correctly
+    merges into one group rather than fragmenting by severity — strictly
+    more aggressive grouping, never a downgrade: a group's severity can
+    only ever be raised by a new occurrence, never lowered, since it's a
+    running max. original_severities (below) still captures every distinct
+    raw value seen, so nothing is lost even though only the max is surfaced
+    as the group's headline severity."""
     groups = {}
     order = []
 
     for f in findings:
         note = extract_remediation_note(f, remediation_guide)
 
-        key = (f.get("component"), f.get("tool"), f.get("rule_id"), f.get("severity"), f.get("category"))
+        key = (f.get("component"), f.get("tool"), f.get("rule_id"), f.get("category"))
         if key not in groups:
             groups[key] = {
                 "component": f.get("component"),
@@ -221,6 +240,12 @@ def group_findings(findings, remediation_guide):
 
         g = groups[key]
         g["occurrence_count"] += 1
+
+        # Deterministic max aggregation — never average, vote, or infer.
+        # A group's severity can only ever be raised by a new occurrence,
+        # never lowered, since this is a running max over SEVERITY_RANK.
+        if SEVERITY_RANK.get(f.get("severity"), -1) > SEVERITY_RANK.get(g["severity"], -1):
+            g["severity"] = f.get("severity")
 
         file_ = f.get("file")
         line_ = f.get("line")
