@@ -224,9 +224,12 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           set +e
+          # --all-projects scans every supported manifest (package.json AND
+          # package-lock.json), not just one. Mutually exclusive with
+          # --file/--package-manager, so those are dropped. Output becomes a
+          # JSON ARRAY — normalize_snyk.py already handles both shapes.
           snyk test \
-            --file=frontend/package.json \
-            --package-manager=npm \
+            --all-projects \
             --json-file-output=snyk-sca-frontend.json
           exit_code=$?
           set -e
@@ -236,6 +239,19 @@ jobs:
             *) echo "::warning::Snyk SCA did not complete cleanly (exit code $exit_code) — check the log above. The report may be missing or incomplete." ;;
           esac
           exit 0
+
+      # Portal-visibility side effect only — see the equivalent step in
+      # app-security-scan-backend.yaml for why this is isolated and
+      # non-blocking.
+      - name: Report to Snyk portal (monitor, non-blocking)
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk monitor \
+            --all-projects \
+            --project-name=cloudcart-frontend \
+            || echo "::warning::snyk monitor did not complete — portal snapshot may be stale. This does not affect the scan results or the pipeline."
 
       # See the equivalent step in app-security-scan-backend.yaml for why
       # this is needed before normalization.
