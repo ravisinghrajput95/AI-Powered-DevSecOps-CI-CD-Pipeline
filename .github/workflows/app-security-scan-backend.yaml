@@ -212,6 +212,20 @@ jobs:
           esac
           exit 0
 
+      # Raw report preserved as its own artifact — without this, an empty
+      # normalized-snyk-sca.json is ambiguous between "genuinely clean scan"
+      # and "Snyk silently failed to find the manifest", since both produce
+      # an empty vulnerabilities[] after normalization. The raw report's
+      # top-level "ok"/"dependencyCount"/error fields (stripped out by
+      # normalize_snyk.py) are what actually disambiguates the two.
+      - name: Upload raw Snyk SCA report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: snyk-sca-backend-report
+          path: snyk-sca-backend.json
+          if-no-files-found: warn
+
       - name: Normalize Snyk SCA findings
         if: always()
         run: python3 scripts/normalize_snyk.py normalized-snyk-sca.json snyk-sca-backend.json

@@ -223,6 +223,16 @@ jobs:
           esac
           exit 0
 
+      # See the equivalent step in app-security-scan-backend.yaml for why
+      # this is needed before normalization.
+      - name: Upload raw Snyk SCA report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: snyk-sca-frontend-report
+          path: snyk-sca-frontend.json
+          if-no-files-found: warn
+
       - name: Normalize Snyk SCA findings
         if: always()
         run: python3 scripts/normalize_snyk.py normalized-snyk-sca.json snyk-sca-frontend.json
