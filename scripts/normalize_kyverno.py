@@ -96,6 +96,9 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from classify_finding import TYPE_BY_CATEGORY, DEFAULT_TYPE, classify_recommendation
 
+# This app's namespace — see the defensive filter in _result_to_finding.
+EXPECTED_NAMESPACE = "cloudcart"
+
 # (severity, category) per (policy, rule). See docstring above for why
 # severity is assigned here rather than read from Kyverno's own annotation.
 CHECK_RULE_MAPPING = {
@@ -170,6 +173,28 @@ def _result_to_finding(r, scope=None):
         file_field = f"{namespace}/{kind}/{name}" if namespace else f"{kind}/{name}"
     else:
         file_field = "unknown"
+
+    # Defensive second layer, not the primary fix: runtime-security-scan.yaml
+    # now queries `kubectl get policyreport -n cloudcart` (not -A), which is
+    # the actual fix for the cluster-wide-noise bug confirmed via a real
+    # run (kube-system/monitoring/etc. reports were silently merged into
+    # the SAME grouped finding as genuine cloudcart violations, since
+    # group_findings' key doesn't include namespace — a rule showing "77
+    # occurrences" was actually 28 real + 49 unrelated cluster noise).
+    # This check doesn't replace that fix; it's a loud backstop in case a
+    # future workflow edit reverts to -A or ClusterPolicyReport ever
+    # carries an unexpected namespace — silently passing through
+    # unrelated-namespace data here would reintroduce the exact same bug
+    # with no signal that it happened.
+    if namespace and namespace != EXPECTED_NAMESPACE:
+        print(
+            f"WARNING: dropping kyverno result for namespace {namespace!r} (expected "
+            f"only {EXPECTED_NAMESPACE!r}) — policy={policy!r} rule={rule!r}. If this "
+            f"fires often, check whether runtime-security-scan.yaml's PolicyReport query "
+            f"is still scoped to -n {EXPECTED_NAMESPACE}.",
+            file=sys.stderr,
+        )
+        return None
 
     # Kyverno auto-generates an "autogen-<rule>" sibling for every rule
     # that targets kinds: [Pod], applying the same check to Deployment/
