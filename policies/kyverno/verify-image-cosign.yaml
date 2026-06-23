@@ -48,6 +48,12 @@ spec:
       verifyImages:
         - imageReferences:
             - "*-docker.pkg.dev/*"
+          # Required when validationFailureAction is Audit — Kyverno's own
+          # admission webhook rejects mutateDigest: true (its default)
+          # combined with Audit, since digest-pinning is a mutation and
+          # Audit mode is observe-only. Confirmed via a real apply attempt:
+          # "mutateDigest must be set to false for 'Audit' failure action".
+          mutateDigest: false
           attestors:
             - count: 1
               entries:
