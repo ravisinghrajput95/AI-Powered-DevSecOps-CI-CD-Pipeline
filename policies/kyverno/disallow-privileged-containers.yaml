@@ -16,24 +16,26 @@ spec:
   validationFailureAction: Audit
   background: true
   rules:
-    - name: privileged-containers
-      match:
-        any:
-        - resources:
-            kinds:
-              - Pod
-      validate:
-        message: >-
-          Privileged mode is disallowed. The fields spec.containers[*].securityContext.privileged,
-          spec.initContainers[*].securityContext.privileged, and spec.ephemeralContainers[*].securityContext.privileged must be unset or set to `false`.
-        pattern:
-          spec:
-            =(ephemeralContainers):
-              - =(securityContext):
-                  =(privileged): "false"
-            =(initContainers):
-              - =(securityContext):
-                  =(privileged): "false"
-            containers:
-              - =(securityContext):
-                  =(privileged): "false"
+  - name: privileged-containers
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+          namespaces:
+          - cloudcart
+    validate:
+      message: >-
+        Privileged mode is disallowed. The fields spec.containers[*].securityContext.privileged,
+        spec.initContainers[*].securityContext.privileged, and spec.ephemeralContainers[*].securityContext.privileged must be unset or set to `false`.
+      pattern:
+        spec:
+          =(ephemeralContainers):
+          - =(securityContext):
+              =(privileged): "false"
+          =(initContainers):
+          - =(securityContext):
+              =(privileged): "false"
+          containers:
+          - =(securityContext):
+              =(privileged): "false"

@@ -1,43 +1,66 @@
 #!/usr/bin/env python3
 """
-Normalizes Kyverno CLI output (`kyverno apply <policies> --resource <dir>
---policy-report --output-format json`) into the shared schema:
+Normalizes Kyverno's live `PolicyReport`/`ClusterPolicyReport` CRD data
+(`kubectl get policyreport -A -o json` + `kubectl get clusterpolicyreport
+-o json`, merged into one `kind: List` object by runtime-security-scan.yaml)
+into the shared schema:
 {tool, severity, category, type, rule_id, message, file, line, confidence, recommendation}
 
-** UNVERIFIED AGAINST REAL OUTPUT — read this before trusting it. **
-Every other normalizer this session (kube-linter, checkov) was built
-against a real, executed scan and iterated until zero unmatched-rule
-warnings. Kyverno is the exception: the CLI binary's release downloads and
-the GitHub API were both unreachable from the sandbox this was written in
-(no live cluster, no `kyverno apply` execution possible), so this targets
-the documented PolicyReport schema (the Kubernetes Policy Working Group's
-open format, `wgpolicyk8s.io/v1alpha2`, confirmed consistent across
-kyverno.io's docs/guides/reports/ and multiple released versions) rather
-than a real captured example:
+VERIFIED AGAINST REAL OUTPUT (2026-06-23) — this has now actually run
+against the live cloudcart-dev cluster, not just the documented schema.
+Two real bugs surfaced and were fixed here as a direct result (both are
+the kind of thing only real data catches, same pattern as every other
+normalizer this session):
+
+1. Kyverno auto-generates an "autogen-<rule>" sibling for every rule that
+   targets kinds: [Pod] (so the same check also applies to Deployment/
+   StatefulSet/DaemonSet/Job/CronJob pod templates, not just bare Pods).
+   A real capture showed e.g. "autogen-require-drop-all" right alongside
+   "require-drop-all" — CHECK_RULE_MAPPING only had the bare names, so
+   every autogen- variant fell through to "uncategorized". Fixed by
+   stripping the "autogen-" prefix before the lookup (see
+   _result_to_finding) rather than doubling every table entry.
+2. A resource-scoped PolicyReport (one report per resource — the common
+   case for policies matching kinds: [Pod]) puts resource identity in a
+   top-level `scope` field (apiVersion/kind/name/namespace/uid), NOT in
+   each result's `resources[]` array the way the original (pre-real-data)
+   version of this file assumed from the documented examples. Real
+   results only carry {category, message, policy, properties, result,
+   rule, scored, severity, source, timestamp} — no `resources` key at
+   all. Fixed by threading the parent report's `scope` through
+   _extract_results as a fallback.
+
+Real schema, confirmed:
 {
   "apiVersion": "wgpolicyk8s.io/v1alpha2",
-  "kind": "PolicyReport",  // or ClusterPolicyReport, or a List of these
+  "kind": "PolicyReport",
+  "metadata": {"namespace": "cloudcart", "name": "<uuid>"},
+  "scope": {"apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "cloudcart-backend-...", "namespace": "cloudcart", "uid": "..."},
   "results": [
-    {
-      "policy": "disallow-privileged-containers",
-      "rule": "privileged-containers",
-      "resources": [{"apiVersion": "v1", "kind": "Pod", "name": "...", "namespace": "..."}],
-      "result": "fail",  // pass | fail | warn | error | skip
-      "message": "validation error: ... rule 'privileged-containers' failed at path /spec/..."
-    }
+    {"policy": "disallow-capabilities-strict", "rule": "autogen-require-drop-all",
+     "result": "fail", "message": "validation failure: Containers must drop `ALL` capabilities.",
+     "category": "Pod Security Standards (Restricted)", "severity": "medium",
+     "source": "kyverno", "scored": true, "properties": {"process": "background scan"}}
   ],
-  "summary": {"pass": 0, "fail": 1, "warn": 0, "error": 0, "skip": 0}
+  "summary": {"error": 0, "fail": 5, "pass": 15, "skip": 0, "warn": 0}
 }
-Treat the first real run's raw JSON as the actual source of truth, not this
-docstring — if the shape differs, fix this file against that real output
-the same way normalize_kubelinter.py/normalize_checkov.py were fixed
-against theirs, and remove this warning once confirmed.
+
+ALSO CONFIRMED FROM THE SAME REAL RUN: none of the 19 ClusterPolicy files
+originally had namespace scoping in their `match` block, so Kyverno's
+background scanner evaluated the ENTIRE cluster, not just cloudcart —
+155 PolicyReports came back, only 34 of them actually about cloudcart
+(the rest: kube-system, GKE-managed components, kyverno/kubearmor's own
+pods, the monitoring stack). Fixed at the SOURCE, not here — every policy
+under policies/kyverno/ now has `namespaces: ["cloudcart"]` added to its
+match.any[].resources block, so this normalizer should only ever see
+cloudcart-scoped reports going forward. Not enforced defensively in this
+file itself — if a future policy gets added without that scoping, the
+fix is in the policy YAML, not a filter bolted on here.
 
 DEFENSIVE PARSING: handles a bare {results, summary} object, a `kind: List`
-wrapper with multiple report objects in `items`, and a top-level JSON array
-of report objects — without knowing which shape `kyverno apply` actually
-emits for multiple resources, all three are at least attempted rather than
-assuming one and silently producing zero findings on a real non-empty scan.
+wrapper with multiple report objects in `items` (the real shape produced
+by the workflow's jq merge step), and a top-level JSON array of report
+objects.
 
 Only result == "fail" becomes a finding, mirroring checkov's failed_checks-
 only and kube-linter's Reports-only approach. "warn" and "error" are NOT
@@ -107,9 +130,13 @@ CHECK_RULE_MAPPING = {
 }
 
 
-def _result_to_finding(r):
+def _result_to_finding(r, scope=None):
     """Build one normalized finding from a single PolicyReport result entry,
-    or return None if it's not finding-worthy (pass/skip)."""
+    or return None if it's not finding-worthy (pass/skip).
+
+    `scope` is the parent report's top-level scope object (apiVersion/kind/
+    name/namespace/uid) — see docstring's "FIXED 2026-06-23 (scope)" note.
+    """
     result = (r.get("result") or "").lower()
     if result not in ("fail", "warn", "error"):
         return None
@@ -120,17 +147,40 @@ def _result_to_finding(r):
     if result != "fail":
         message = f"[{result.upper()}] {message}"
 
+    # Real captured reports carry per-result resources[] sometimes, but for
+    # reports scoped to exactly one resource (the common case for our
+    # ClusterPolicies, which all match kinds: [Pod]), resource identity
+    # lives in the report-level `scope` field instead — confirmed via a
+    # real capture, not the original docs examples this was first built
+    # against (see docstring). Try resources[] first, fall back to scope.
     resources = r.get("resources") or []
     if resources:
         res = resources[0]
         kind = res.get("kind", "unknown")
         name = res.get("name", "unknown")
         namespace = res.get("namespace", "")
+    elif scope:
+        kind = scope.get("kind", "unknown")
+        name = scope.get("name", "unknown")
+        namespace = scope.get("namespace", "")
+    else:
+        kind = name = namespace = None
+
+    if kind and name:
         file_field = f"{namespace}/{kind}/{name}" if namespace else f"{kind}/{name}"
     else:
         file_field = "unknown"
 
-    key = (policy, rule)
+    # Kyverno auto-generates an "autogen-<rule>" sibling for every rule
+    # that targets kinds: [Pod], applying the same check to Deployment/
+    # StatefulSet/DaemonSet/Job/CronJob pod templates too — confirmed via
+    # real findings (e.g. "autogen-require-drop-all" alongside "require-
+    # drop-all"). Same underlying check either way, so strip the prefix
+    # before the lookup rather than doubling every CHECK_RULE_MAPPING
+    # entry. rule_id keeps the real (possibly autogen-) name for
+    # traceability — only the lookup key is normalized.
+    lookup_rule = rule[len("autogen-"):] if rule.startswith("autogen-") else rule
+    key = (policy, lookup_rule)
     if key in CHECK_RULE_MAPPING:
         severity, category = CHECK_RULE_MAPPING[key]
     else:
@@ -159,8 +209,11 @@ def _result_to_finding(r):
 
 
 def _extract_results(report):
-    """Defensively pull a flat list of result dicts out of whatever shape
-    the real report turns out to be — see docstring's DEFENSIVE PARSING."""
+    """Defensively pull a flat list of (result, scope) tuples out of
+    whatever shape the real report turns out to be — see docstring's
+    DEFENSIVE PARSING. `scope` is threaded through so _result_to_finding
+    can fall back to it for resource identity when results[].resources is
+    absent (the common real case — see docstring's FIXED note)."""
     if isinstance(report, list):
         results = []
         for item in report:
@@ -176,13 +229,14 @@ def _extract_results(report):
             results.extend(_extract_results(item))
         return results
 
-    return report.get("results", [])
+    scope = report.get("scope")
+    return [(r, scope) for r in report.get("results", [])]
 
 
 def normalize_report(report):
     findings = []
-    for r in _extract_results(report):
-        finding = _result_to_finding(r)
+    for r, scope in _extract_results(report):
+        finding = _result_to_finding(r, scope)
         if finding is not None:
             findings.append(finding)
     return findings

@@ -39,29 +39,31 @@ spec:
   webhookTimeoutSeconds: 30
   failurePolicy: Fail
   rules:
-    - name: verify-cosign-keyless-signature
-      match:
-        any:
-          - resources:
-              kinds:
-                - Pod
-      verifyImages:
-        - imageReferences:
-            - "*-docker.pkg.dev/*"
+  - name: verify-cosign-keyless-signature
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+          namespaces:
+          - cloudcart
+    verifyImages:
+    - imageReferences:
+      - "*-docker.pkg.dev/*"
           # Required when validationFailureAction is Audit — Kyverno's own
           # admission webhook rejects mutateDigest: true (its default)
           # combined with Audit, since digest-pinning is a mutation and
           # Audit mode is observe-only. Confirmed via a real apply attempt:
           # "mutateDigest must be set to false for 'Audit' failure action".
-          mutateDigest: false
-          attestors:
-            - count: 1
-              entries:
-                - keyless:
+      mutateDigest: false
+      attestors:
+      - count: 1
+        entries:
+        - keyless:
                     # Wildcard covers both backend-ci.yaml and frontend-ci.yaml
                     # signing the same way, while still pinning to THIS repo
                     # and the main branch — not an arbitrary external signer.
-                    subject: "https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/.github/workflows/*-ci.yaml@refs/heads/main"
-                    issuer: "https://token.actions.githubusercontent.com"
-                    rekor:
-                      url: https://rekor.sigstore.dev
+            subject: "https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/.github/workflows/*-ci.yaml@refs/heads/main"
+            issuer: "https://token.actions.githubusercontent.com"
+            rekor:
+              url: https://rekor.sigstore.dev

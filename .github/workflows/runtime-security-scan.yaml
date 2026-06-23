@@ -7,6 +7,14 @@ name: Runtime Security Scan (DAST + Kyverno + KubeArmor)
 # cluster, not a commit-tied static artifact. kube-linter/checkov/terraform
 # validate stay in infra-security-scan.yaml since those assess config
 # without anything actually running.
+#
+# workflow_dispatch ONLY, deliberately — explicit decision, not the
+# default GitOps push-to-apply pattern used elsewhere in this pipeline
+# (infra-security-scan.yaml, app-security-scan-*.yaml). Even though every
+# policy here is Audit-mode (non-blocking), applying ClusterPolicy/
+# KubeArmorPolicy objects to the real cloudcart-dev cluster stays a
+# human-initiated action rather than an automatic side effect of pushing a
+# YAML file to main.
 on:
   workflow_dispatch:
     inputs:
@@ -20,12 +28,6 @@ on:
         required: false
         type: boolean
         default: false
-  push:
-    branches:
-      - main
-    paths:
-      - "policies/kyverno/**"
-      - "policies/kubearmor/**"
 
 permissions:
   contents: read
@@ -33,19 +35,11 @@ permissions:
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────
-  # Moved verbatim from the now-retired dast.yaml — logic unchanged, EXCEPT
-  # for the added `if:` below. DAST was always deliberately on-demand only
-  # (workflow_dispatch), never commit-triggered — scanning the live app has
-  # nothing to do with what changed in a given commit. The push trigger
-  # added to this workflow's `on:` block is for Kyverno/KubeArmor policy
-  # changes specifically, but `on:` is workflow-level, not job-level, so
-  # without this `if:` a policy YAML edit would silently drag a full ZAP
-  # scan along with it too. Caught from a real question, not assumed.
+  # Moved verbatim from the now-retired dast.yaml — logic unchanged.
   # ───────────────────────────────────────────────────────────────────────
   zap-baseline-scan:
     name: ZAP Baseline Scan
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code (for scripts/)
         uses: actions/checkout@v6
@@ -71,12 +65,7 @@ jobs:
       - name: ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.15.0
         with:
-          # inputs.target_url only exists for workflow_dispatch — this
-          # workflow now also triggers on push (policies/kyverno|kubearmor
-          # changes), where `inputs` doesn't exist at all. Falls back to
-          # the same hardcoded default so a push-triggered run doesn't
-          # scan a blank target.
-          target: ${{ inputs.target_url || 'http://35.224.10.204/' }}
+          target: ${{ inputs.target_url }}
           cmd_options: '-I'
           fail_action: false
           allow_issue_writing: false
