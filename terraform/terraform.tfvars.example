@@ -1,0 +1,7 @@
+project_id   = "your-gcp-project-id"
+region       = "us-central1"
+zone         = "us-central1-a"
+cluster_name = "cloudcart-dev"
+node_count   = 3
+machine_type = "e2-medium"
+environment  = "production"
