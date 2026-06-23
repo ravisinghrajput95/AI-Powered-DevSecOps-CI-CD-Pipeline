@@ -19,7 +19,7 @@ variable "zone" {
 variable "cluster_name" {
   description = "GKE Cluster name"
   type        = string
-  default     = "cloudcart-gke"
+  default     = "cloudcart-dev"
 }
 
 variable "node_count" {
@@ -38,7 +38,7 @@ variable "allowed_cidr" {
   description = "CIDR allowed to access cluster"
   type        = string
   # VULN: Open to entire internet
-  default = "0.0.0.0/0"
+  default     = "0.0.0.0/0"
 }
 
 variable "environment" {
