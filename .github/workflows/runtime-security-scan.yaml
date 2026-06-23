@@ -152,7 +152,18 @@ jobs:
         id: kyverno_run
         run: |
           set +e
-          kubectl get policyreport -A -o json > policyreport.json
+          # Scoped to -n cloudcart, not -A. Confirmed via a real run: even
+          # with namespace scoping added to every policy's match block,
+          # Kyverno's background scanner needs time to re-evaluate
+          # everything and garbage-collect reports for resources that no
+          # longer match — a 30s wait isn't enough, and relying on that
+          # timing alone left kube-system/monitoring/etc. reports mixed
+          # into the SAME grouped finding as genuine cloudcart violations
+          # (group_findings' key doesn't include namespace, so a rule
+          # showing "77 occurrences" was actually 28 real + 49 unrelated
+          # cluster noise, silently merged). Scoping the query itself is
+          # the robust fix — doesn't depend on background-scan timing.
+          kubectl get policyreport -n cloudcart -o json > policyreport.json
           pr_exit=$?
           kubectl get clusterpolicyreport -o json > clusterpolicyreport.json
           cpr_exit=$?
