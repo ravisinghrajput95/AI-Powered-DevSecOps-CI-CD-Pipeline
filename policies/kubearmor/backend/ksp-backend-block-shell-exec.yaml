@@ -1,0 +1,40 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: ksp-backend-block-shell-exec
+  namespace: cloudcart
+  annotations:
+    description: >-
+      CUSTOM policy, not from any upstream library. Targets actual runtime
+      process execution — genuinely non-overlapping with kube-linter/
+      Kyverno, both of which only check declarative Pod spec fields
+      (privileged, capabilities, runAsNonRoot, etc.), never what a
+      container actually executes once running.
+
+      Directly relevant to an already-confirmed real finding from an
+      earlier session: backend/routes/admin.py has a confirmed command-
+      injection route (this is why DAST's Full Scan is deliberately
+      deferred — see dast.yaml's original comments). If that route is ever
+      exploited to spawn a shell, this policy is the kernel-level backstop
+      that catches it even though the vulnerable code itself isn't fixed
+      by this policy.
+spec:
+  severity: 8
+  message: "Unexpected shell execution in the backend container"
+  tags: ["MITRE-T1059", "command-injection-defense"]
+  selector:
+    matchLabels:
+      app: cloudcart-backend
+  process:
+    matchPaths:
+      - path: /bin/sh
+      - path: /bin/bash
+      - path: /bin/dash
+      - path: /usr/bin/sh
+      - path: /usr/bin/bash
+  # Audit first, same "start audit, then enforce" sequencing used for
+  # every Kyverno policy and every other tool in this pipeline — confirm
+  # zero false positives (the Flask backend has no legitimate reason to
+  # spawn a shell during normal operation, but worth verifying against
+  # real traffic before this becomes a hard Block) before flipping action.
+  action: Audit

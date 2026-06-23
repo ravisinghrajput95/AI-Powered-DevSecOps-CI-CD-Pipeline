@@ -1,0 +1,29 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: ksp-frontend-block-shell-exec
+  namespace: cloudcart
+  annotations:
+    description: >-
+      CUSTOM policy, mirrors ksp-backend-block-shell-exec — frontend was
+      the one tier with no dedicated KubeArmor coverage (backend has the
+      confirmed command-injection finding driving its 4-policy coverage;
+      postgres got the same shell-exec backstop). A static-asset frontend
+      container has even less legitimate reason to spawn a shell than the
+      backend does, so this stays low-noise while still closing the gap.
+spec:
+  severity: 7
+  message: "Unexpected shell execution in the frontend container"
+  tags: ["MITRE-T1059", "command-injection-defense"]
+  selector:
+    matchLabels:
+      app: cloudcart-frontend
+  process:
+    matchPaths:
+      - path: /bin/sh
+      - path: /bin/bash
+      - path: /bin/dash
+      - path: /usr/bin/sh
+      - path: /usr/bin/bash
+  # Audit first — same sequencing as every other policy in this set.
+  action: Audit

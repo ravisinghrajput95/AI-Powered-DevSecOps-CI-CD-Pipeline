@@ -1,0 +1,27 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: ksp-frontend-audit-payload-tools
+  namespace: cloudcart
+  annotations:
+    description: >-
+      CUSTOM policy, mirrors ksp-backend-audit-payload-tools. Complements
+      ksp-frontend-block-shell-exec the same way the backend pair does —
+      a second-stage payload download doesn't require a shell first if
+      curl/wget is reachable directly. execname matching, not full path,
+      so this catches the binary regardless of install location across
+      base images.
+spec:
+  severity: 5
+  message: "Package manager or payload-download tool executed in the frontend container"
+  tags: ["MITRE-T1105", "command-injection-defense"]
+  selector:
+    matchLabels:
+      app: cloudcart-frontend
+  process:
+    matchPaths:
+      - execname: apt
+      - execname: apt-get
+      - execname: curl
+      - execname: wget
+  action: Audit

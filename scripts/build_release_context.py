@@ -106,6 +106,19 @@ SEVERITY_NORMALIZATION = {
     # normalize_checkov.py's docstring) — same identity-mapping reasoning
     # as kube-linter above.
     "checkov": {"critical": "critical", "high": "high", "medium": "medium", "low": "low", "informational": "informational"},
+    # Kyverno's policies DO carry a native policies.kyverno.io/severity
+    # annotation, but it's uniformly "medium" across every policy in the
+    # PSS library (confirmed by checking all 18 real policy files used
+    # here) — not a usable per-finding signal. normalize_kyverno.py assigns
+    # its own informed severity per (policy, rule) directly, same as
+    # kube-linter/checkov; this is the same identity-mapping passthrough.
+    "kyverno": {"critical": "critical", "high": "high", "medium": "medium", "low": "low", "informational": "informational"},
+    # KubeArmor DOES have a genuinely usable native per-event severity (a
+    # 1-10 scale set by whoever wrote the KubeArmorPolicy/
+    # KubeArmorHostPolicy) — normalize_kubearmor.py bands that 1-10 scale
+    # into this pipeline's 5-tier scale itself, so this is still an
+    # identity passthrough at this layer, same reasoning as the others.
+    "kubearmor": {"critical": "critical", "high": "high", "medium": "medium", "low": "low", "informational": "informational"},
 }
 
 
@@ -414,6 +427,35 @@ def compute_dependency_summary(findings):
     }
 
 
+def compute_scan_metadata(metadata_raw, findings):
+    """Deterministic staleness calculation, shared by every tool that
+    targets the live deployed app/cluster rather than a specific commit
+    (DAST, Kyverno's live PolicyReport query, KubeArmor's live log
+    capture) — there's no "is this the right version" check possible for
+    any of them, only "how old is this data". Computing it here means the
+    analyst prompt receives a fact, not raw timestamps it would otherwise
+    have to subtract itself. Originally DAST-only logic, factored out
+    once Kyverno/KubeArmor needed the exact same shape."""
+    if metadata_raw:
+        scanned_at_str = metadata_raw.get("scanned_at")
+        try:
+            scanned_at = datetime.fromisoformat(scanned_at_str.replace("Z", "+00:00"))
+            days_stale = (datetime.now(timezone.utc) - scanned_at).days
+        except (TypeError, ValueError):
+            days_stale = None
+        return {
+            "run_id": metadata_raw.get("run_id"),
+            "scanned_at": scanned_at_str,
+            "days_stale": days_stale,
+        }
+    elif findings:
+        # Findings exist but no metadata was provided (e.g. builder run
+        # locally with just --*-findings) — say so explicitly rather than
+        # implying freshness by omission.
+        return {"run_id": None, "scanned_at": None, "days_stale": "unknown"}
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", required=True)
@@ -427,6 +469,10 @@ def main():
     parser.add_argument("--frontend-sbom")
     parser.add_argument("--dast-findings")
     parser.add_argument("--dast-metadata")
+    parser.add_argument("--kyverno-findings")
+    parser.add_argument("--kyverno-metadata")
+    parser.add_argument("--kubearmor-findings")
+    parser.add_argument("--kubearmor-metadata")
     parser.add_argument("--supply-chain")
     parser.add_argument("--risk-acceptance")
     parser.add_argument("--scan-status")
@@ -443,40 +489,30 @@ def main():
     all_findings.extend(frontend_findings)
     sbom_summary["frontend"] = build_component_sbom(args.frontend_sbom, frontend_snyk)
 
-    # DAST gets its own component value rather than "backend" or "frontend".
-    # ZAP tests the live, deployed app as a whole — it doesn't (and can't)
-    # assert which code component is responsible for a given finding; that
-    # static-asset URLs happened to be what this particular crawl found is
-    # incidental to this run, not something ZAP's data actually claims.
-    # Tagging these as "frontend" would be exactly the kind of inferred
-    # attribution this builder is supposed to avoid.
+    # DAST/Kyverno/KubeArmor all get the same "deployed-app" component
+    # rather than "backend"/"frontend" — all three test the live cluster/
+    # app as a whole and can't (and shouldn't) assert which code component
+    # is responsible for a given finding. Kyverno moved here from an
+    # earlier, now-reverted attempt to give it its own "kyverno" component
+    # under build_infra_context.py — it's now treated as a live, runtime
+    # signal (queries the real cluster's PolicyReport CRDs) grouped with
+    # DAST/KubeArmor instead, consistent with how it's actually collected.
     dast_findings = load_json(args.dast_findings, [])
     all_findings.extend(tag_findings(dast_findings, "deployed-app"))
+    dast_scan_metadata = compute_scan_metadata(load_json(args.dast_metadata, None), dast_findings)
 
-    # Deterministic staleness calculation — DAST isn't tied to a commit the
-    # way the other tools are, so there's no "is this the right version"
-    # check possible, only "how old is this data". Computing that here means
-    # the analyst prompt receives a fact, not raw timestamps it would
-    # otherwise have to subtract itself.
-    dast_metadata_raw = load_json(args.dast_metadata, None)
-    dast_scan_metadata = None
-    if dast_metadata_raw:
-        scanned_at_str = dast_metadata_raw.get("scanned_at")
-        try:
-            scanned_at = datetime.fromisoformat(scanned_at_str.replace("Z", "+00:00"))
-            days_stale = (datetime.now(timezone.utc) - scanned_at).days
-        except (TypeError, ValueError):
-            days_stale = None
-        dast_scan_metadata = {
-            "run_id": dast_metadata_raw.get("run_id"),
-            "scanned_at": scanned_at_str,
-            "days_stale": days_stale,
-        }
-    elif dast_findings:
-        # Findings exist but no metadata was provided (e.g. builder run
-        # locally with just --dast-findings) — say so explicitly rather
-        # than implying freshness by omission.
-        dast_scan_metadata = {"run_id": None, "scanned_at": None, "days_stale": "unknown"}
+    kyverno_findings = load_json(args.kyverno_findings, [])
+    all_findings.extend(tag_findings(kyverno_findings, "deployed-app"))
+    kyverno_scan_metadata = compute_scan_metadata(load_json(args.kyverno_metadata, None), kyverno_findings)
+
+    # KubeArmor's findings are a bounded-duration live capture, not a
+    # historical query (karmor has no persistent store of past events) —
+    # see normalize_kubearmor.py's docstring. A quiet capture window
+    # legitimately produces zero findings; that's not the same "clean
+    # scan" meaning a kube-linter/checkov zero-findings result has.
+    kubearmor_findings = load_json(args.kubearmor_findings, [])
+    all_findings.extend(tag_findings(kubearmor_findings, "deployed-app"))
+    kubearmor_scan_metadata = compute_scan_metadata(load_json(args.kubearmor_metadata, None), kubearmor_findings)
 
     remediation_guide = {}
     grouped_findings = group_findings(all_findings, remediation_guide)
@@ -498,15 +534,15 @@ def main():
         component: {tool: "not_configured" for tool in ("codeql", "sonarcloud", "gitguardian", "snyk", "snyk_sca", "syft")}
         for component in ("backend", "frontend")
     }
-    default_scan_status["deployed-app"] = {"zap": "not_configured"}
+    default_scan_status["deployed-app"] = {"zap": "not_configured", "kyverno": "not_configured", "kubearmor": "not_configured"}
     scan_status = load_json(args.scan_status, default_scan_status)
     # Guaranteed present regardless of whether a passed-in --scan-status file
     # already accounts for it — release-readiness.yml's own scan-status merge
-    # step doesn't know about DAST yet (it's a separate, on-demand workflow
-    # not tied to a commit SHA the way the others are), so without this,
-    # "deployed-app" would be silently absent rather than honestly
-    # "not_configured" whenever a real --scan-status file is passed.
-    scan_status.setdefault("deployed-app", {"zap": "not_configured"})
+    # step doesn't know about DAST/Kyverno/KubeArmor yet (they're a separate,
+    # on-demand workflow not tied to a commit SHA the way the others are),
+    # so without this, "deployed-app" would be silently absent rather than
+    # honestly "not_configured" whenever a real --scan-status file is passed.
+    scan_status.setdefault("deployed-app", {"zap": "not_configured", "kyverno": "not_configured", "kubearmor": "not_configured"})
     if not args.scan_status:
         print(
             "NOTE: no --scan-status file provided. Every tool's scan_status will be "
@@ -551,6 +587,8 @@ def main():
         "scan_status": scan_status,
         "signal_availability": signal_availability,
         "dast_scan_metadata": dast_scan_metadata,
+        "kyverno_scan_metadata": kyverno_scan_metadata,
+        "kubearmor_scan_metadata": kubearmor_scan_metadata,
         "release_statistics": compute_release_statistics(grouped_findings),
     }
 

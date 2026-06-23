@@ -1,0 +1,61 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-cosign
+  annotations:
+    policies.kyverno.io/title: Verify Cosign Image Signature (Keyless)
+    policies.kyverno.io/category: Software Supply Chain Security
+    policies.kyverno.io/severity: critical
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      CUSTOM POLICY (not from the upstream kyverno/policies library) — written
+      specifically for this repo. backend-ci.yaml/frontend-ci.yaml sign every
+      built image with `cosign sign --yes` using KEYLESS signing (Sigstore
+      Fulcio/Rekor via the GitHub Actions OIDC token, sigstore/cosign-installer
+      action) — confirmed by reading those workflows directly, not assumed.
+      This is deliberately NOT the more commonly-documented keys.publicKeys
+      attestor pattern; using that would never match a real signature here.
+
+      KNOWN GAP: the exact image registry path
+      ($GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_*/$*_IMAGE_NAME)
+      is built entirely from GitHub Secrets not visible to this policy author.
+      imageReferences below uses a broad "*-docker.pkg.dev/*" wildcard as a
+      placeholder — narrow this to the real resolved path once those secret
+      values are known, e.g.:
+        us-central1-docker.pkg.dev/project-0c628a24-2e5e-4878-861/cloudcart-repo/backend*
+      A wildcard this broad would also match images from unrelated GAR repos
+      in the same project if any exist later.
+
+      Also UNVERIFIED end-to-end: this is the one domain this session that
+      couldn't be executed locally (no live cluster, no kyverno CLI binary
+      reachable from the sandbox used to write this). The keyless subject/
+      issuer/rekor fields below are correct per Sigstore's documented
+      certificate SAN format, but the first real `kyverno apply` run against
+      an actual signed image is what actually confirms this matches.
+    policies.kyverno.io/minversion: 1.7.0
+spec:
+  validationFailureAction: Audit
+  background: false
+  webhookTimeoutSeconds: 30
+  failurePolicy: Fail
+  rules:
+    - name: verify-cosign-keyless-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - imageReferences:
+            - "*-docker.pkg.dev/*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    # Wildcard covers both backend-ci.yaml and frontend-ci.yaml
+                    # signing the same way, while still pinning to THIS repo
+                    # and the main branch — not an arbitrary external signer.
+                    subject: "https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/.github/workflows/*-ci.yaml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev

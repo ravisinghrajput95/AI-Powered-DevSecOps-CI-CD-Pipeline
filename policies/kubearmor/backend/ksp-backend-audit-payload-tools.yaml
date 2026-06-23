@@ -1,0 +1,29 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: ksp-backend-audit-payload-tools
+  namespace: cloudcart
+  annotations:
+    description: >-
+      CUSTOM policy. Complements ksp-backend-block-shell-exec — even if an
+      attacker reaches the backend through some path that doesn't involve
+      spawning a shell directly, downloading and running a second-stage
+      payload almost always needs one of these tools. execname matching
+      (not full path) so this catches the binary regardless of which
+      directory it's installed in across base images.
+spec:
+  severity: 6
+  message: "Package manager or payload-download tool executed in the backend container"
+  tags: ["MITRE-T1105", "command-injection-defense"]
+  selector:
+    matchLabels:
+      app: cloudcart-backend
+  process:
+    matchPaths:
+      - execname: apt
+      - execname: apt-get
+      - execname: pip
+      - execname: pip3
+      - execname: curl
+      - execname: wget
+  action: Audit

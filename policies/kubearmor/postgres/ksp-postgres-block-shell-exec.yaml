@@ -1,0 +1,28 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: ksp-postgres-block-shell-exec
+  namespace: cloudcart
+  annotations:
+    description: >-
+      CUSTOM policy. Same shell-exec defense as the backend policy, applied
+      to the database tier — postgres has no legitimate reason to spawn an
+      interactive shell during normal operation (the existing
+      reset-database CI job uses `kubectl exec ... -- psql` directly, which
+      runs the psql binary, not a shell, so this doesn't conflict with that
+      established workflow).
+spec:
+  severity: 7
+  message: "Unexpected shell execution in the postgres container"
+  tags: ["MITRE-T1059", "database-tier-hardening"]
+  selector:
+    matchLabels:
+      app: postgres
+  process:
+    matchPaths:
+      - path: /bin/sh
+      - path: /bin/bash
+      - path: /bin/dash
+      - path: /usr/bin/sh
+      - path: /usr/bin/bash
+  action: Audit

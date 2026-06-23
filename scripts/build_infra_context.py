@@ -15,7 +15,7 @@ rules (the 3-question test: deterministic? Python better? materially
 improves reasoning?) apply identically regardless of domain, so there's no
 reason for infra to reinvent grouping/severity-normalization/statistics.
 
-UPDATED 2026-06-23: Terraform/Checkov findings now flow through this SAME
+UPDATED 2026-06-23 (Checkov): Terraform/Checkov findings now flow through this SAME
 builder rather than a separate build_terraform_context.py — Terraform-sec
 folds into the existing infra-sec domain (both are "infrastructure
 configuration," just two different layers: rendered K8s manifests vs.
@@ -28,6 +28,15 @@ kube-linter), so group_findings' (component, tool, rule_id, category) key
 keeps them from ever cross-merging with kube-linter findings even when a
 rule_id coincidentally matches.
 
+UPDATED 2026-06-23 (Kyverno — REVERTED same day): Kyverno was briefly wired
+in here as a third additive source, then moved back out — Kyverno (and
+KubeArmor) are runtime/admission-time tools, grouped with DAST in a
+separate runtime-security workflow instead, since everything in THIS
+builder is static/build-time (kube-linter, kubeconform, checkov, terraform
+validate all assess config/manifests without anything actually running).
+If Kyverno findings need to land in a context object at all, that's a
+decision for the runtime-security workflow's own builder, not this one.
+
 KNOWN LIMITATIONS:
 1. kubeconform is treated as a pass/fail validity GATE, not a source of
    findings — it answers "does this chart render to valid Kubernetes
@@ -38,9 +47,9 @@ KNOWN LIMITATIONS:
    merged into schema_validation, since they're factually answering
    different questions (K8s manifest schema validity vs. HCL/provider-
    schema validity) even though both are "is this config even valid".
-2. infra-readiness.yml's --scan-status merge logic now expects this
-   combined shape (both "infrastructure" and "terraform" top-level keys) —
-   see that workflow's updated artifact list.
+2. infra-readiness.yml's --scan-status merge logic expects this combined
+   shape (both "infrastructure" and "terraform" top-level keys) — see that
+   workflow's updated artifact list.
 3. Checkov's free/OSS checks have a confirmed real coverage gap: they flag
    literal "basic role" (Owner/Editor/Viewer) IAM grants but not other
    broad admin-level roles (e.g. roles/storage.admin, roles/container.admin

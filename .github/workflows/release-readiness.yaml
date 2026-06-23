@@ -108,36 +108,50 @@ jobs:
           download_with_run_suffix "app-security-scan-backend.yaml" "security-findings-backend"
           download_with_run_suffix "app-security-scan-frontend.yaml" "security-findings-frontend"
 
-          # DAST is fundamentally different from the four above: it's not
-          # triggered by a commit at all (workflow_dispatch only, scans
-          # whatever's currently deployed). There's no SHA to match against,
-          # so rather than forcing a correlation that doesn't exist, this
-          # grabs the most recent successful run and records exactly when it
-          # happened — staleness becomes visible data in ReleaseContext,
-          # not a hidden assumption that the result is fresh.
+          # DAST/Kyverno/KubeArmor are all fundamentally different from the
+          # four above: none are triggered by a commit (workflow_dispatch
+          # only, scans/queries whatever's currently deployed/running).
+          # There's no SHA to match against, so rather than forcing a
+          # correlation that doesn't exist, this grabs the most recent
+          # successful run of the combined runtime-security workflow and
+          # records exactly when it happened — staleness becomes visible
+          # data in ReleaseContext, not a hidden assumption of freshness.
+          # All three now live in ONE workflow (folded together 2026-06-23
+          # — DAST already tested the live deployed app; Kyverno's
+          # PolicyReport query and KubeArmor's log capture are the same
+          # kind of live-cluster signal, not commit-tied static checks),
+          # so this is one workflow-name lookup + one run-id lookup,
+          # reused for all three artifact downloads below.
           #
           # Resolved by workflow NAME via the Actions API, not by filename
           # via `gh run list --workflow=<file>.yml` — the latter requires the
           # file to exist on the default branch to resolve at all, which
           # fails with a 404 even when the workflow has real successful runs,
           # if the file currently lives on a different branch or was renamed.
-          DAST_WORKFLOW_ID=$(gh api "repos/${{ github.repository }}/actions/workflows" \
-            --jq '.workflows[] | select(.name=="DAST Scan (ZAP Baseline)") | .id' | head -n1)
+          RUNTIME_WORKFLOW_ID=$(gh api "repos/${{ github.repository }}/actions/workflows" \
+            --jq '.workflows[] | select(.name=="Runtime Security Scan (DAST + Kyverno + KubeArmor)") | .id' | head -n1)
 
-          if [ -z "$DAST_WORKFLOW_ID" ]; then
-            echo "::warning::No workflow named 'DAST Scan (ZAP Baseline)' found via the Actions API — deployed-app findings will be absent from ReleaseContext. Check that dast-scan.yml has been pushed and run at least once."
+          if [ -z "$RUNTIME_WORKFLOW_ID" ]; then
+            echo "::warning::No workflow named 'Runtime Security Scan (DAST + Kyverno + KubeArmor)' found via the Actions API — deployed-app findings will be absent from ReleaseContext. Check that runtime-security-scan.yaml has been pushed and run at least once."
           else
-            DAST_RUN_ID=$(gh run list --workflow="$DAST_WORKFLOW_ID" --status=success \
+            RUNTIME_RUN_ID=$(gh run list --workflow="$RUNTIME_WORKFLOW_ID" --status=success \
               --json databaseId --jq '.[0].databaseId')
 
-            if [ -z "$DAST_RUN_ID" ]; then
-              echo "::warning::Found the DAST workflow but no successful run of it — deployed-app findings will be absent from ReleaseContext."
-            elif gh run download "$DAST_RUN_ID" -n "normalized-zap" -D inputs/ 2>/dev/null; then
-              SCANNED_AT=$(gh run view "$DAST_RUN_ID" --json createdAt --jq '.createdAt')
-              printf '{"run_id": "%s", "scanned_at": "%s"}' "$DAST_RUN_ID" "$SCANNED_AT" > inputs/dast_metadata.json
-              echo "Downloaded DAST findings from run $DAST_RUN_ID (scanned at $SCANNED_AT)"
+            if [ -z "$RUNTIME_RUN_ID" ]; then
+              echo "::warning::Found the runtime-security workflow but no successful run of it — deployed-app findings will be absent from ReleaseContext."
             else
-              echo "::warning::Found a successful DAST run ($DAST_RUN_ID) but its 'normalized-zap' artifact wasn't found."
+              SCANNED_AT=$(gh run view "$RUNTIME_RUN_ID" --json createdAt --jq '.createdAt')
+
+              for pair in "normalized-zap:dast" "normalized-kyverno:kyverno" "normalized-kubearmor:kubearmor"; do
+                artifact="${pair%%:*}"
+                metadata_name="${pair##*:}"
+                if gh run download "$RUNTIME_RUN_ID" -n "$artifact" -D inputs/ 2>/dev/null; then
+                  printf '{"run_id": "%s", "scanned_at": "%s"}' "$RUNTIME_RUN_ID" "$SCANNED_AT" > "inputs/${metadata_name}_metadata.json"
+                  echo "Downloaded '$artifact' from run $RUNTIME_RUN_ID (scanned at $SCANNED_AT)"
+                else
+                  echo "::warning::Run $RUNTIME_RUN_ID succeeded but artifact '$artifact' was not found."
+                fi
+              done
             fi
           fi
 
@@ -275,6 +289,10 @@ jobs:
           [ -f inputs/normalized-sbom-frontend.json ] && ARGS+=(--frontend-sbom inputs/normalized-sbom-frontend.json)
           [ -f inputs/normalized-zap.json ] && ARGS+=(--dast-findings inputs/normalized-zap.json)
           [ -f inputs/dast_metadata.json ] && ARGS+=(--dast-metadata inputs/dast_metadata.json)
+          [ -f inputs/normalized-kyverno.json ] && ARGS+=(--kyverno-findings inputs/normalized-kyverno.json)
+          [ -f inputs/kyverno_metadata.json ] && ARGS+=(--kyverno-metadata inputs/kyverno_metadata.json)
+          [ -f inputs/normalized-kubearmor.json ] && ARGS+=(--kubearmor-findings inputs/normalized-kubearmor.json)
+          [ -f inputs/kubearmor_metadata.json ] && ARGS+=(--kubearmor-metadata inputs/kubearmor_metadata.json)
           ARGS+=(--supply-chain inputs/supply_chain.json)
           ARGS+=(--scan-status inputs/scan_status.json)
           # No --risk-acceptance passed: no exception-tracking system exists yet.

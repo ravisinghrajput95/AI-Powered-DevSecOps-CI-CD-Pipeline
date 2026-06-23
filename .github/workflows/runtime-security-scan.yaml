@@ -1,0 +1,327 @@
+name: Runtime Security Scan (DAST + Kyverno + KubeArmor)
+
+# DAST, Kyverno's live PolicyReport query, and KubeArmor's live log capture
+# are grouped here rather than across separate workflows (or, for Kyverno,
+# alongside the static infra-security-scan.yaml where it briefly lived) —
+# all three test/query the REAL, persistent cloudcart-dev deployment and
+# cluster, not a commit-tied static artifact. kube-linter/checkov/terraform
+# validate stay in infra-security-scan.yaml since those assess config
+# without anything actually running.
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "URL to scan (DAST only)"
+        required: false
+        default: "http://35.224.10.204/"
+        type: string
+      reset_database:
+        description: "Reset the database after the DAST scan (truncate + reseed). Off by default — Baseline Scan is passive/read-only, so this is mainly worth enabling if you suspect a GET route has a stateful side effect, or once Full Scan is ever adopted here."
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches:
+      - main
+    paths:
+      - "policies/kyverno/**"
+      - "policies/kubearmor/**"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────
+  # Moved verbatim from the now-retired dast.yaml — logic unchanged.
+  # ───────────────────────────────────────────────────────────────────────
+  zap-baseline-scan:
+    name: ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code (for scripts/)
+        uses: actions/checkout@v6
+
+      # Baseline only: spider + passive analysis, no active attack payloads,
+      # no form submissions. Deliberately not action-full-scan — see the
+      # discussion that led here: backend/routes/admin.py's confirmed
+      # command-injection route and vulnerable.py's other primitives haven't
+      # been bounded the way the SSRF-to-metadata path was, so an active scan
+      # against this live target stays out of scope for now.
+      #
+      # fail_action/allow_issue_writing explicitly set even though false/true
+      # are the respective library defaults — matches this pipeline's existing
+      # convention of not relying on implicit tool defaults for behavior that
+      # matters (report-only, no GitHub issue spam, consistent with how every
+      # other scanner here was wired up).
+      #
+      # cmd_options is just '-I' — the action already runs zap-baseline.py
+      # with its own `-J report_json.json` by default. Adding a second -J
+      # with a custom filename (tried initially) made the underlying script
+      # only honor the last one, so the action's own expected report_json.json
+      # never got created and its post-scan step failed looking for it.
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: ${{ inputs.target_url }}
+          cmd_options: '-I'
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: 'zap-baseline-report'
+
+      # Explicit upload of just the JSON, in addition to the action's own
+      # html/md/json bundle above — same defensive pattern used for Snyk/SBOM
+      # elsewhere, so the normalizer's input file is predictably named and
+      # findable regardless of what else is in the action's artifact zip.
+      - name: Upload ZAP JSON report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-report-json
+          path: report_json.json
+          if-no-files-found: warn
+
+      - name: Normalize ZAP findings
+        if: always()
+        run: python3 scripts/normalize_zap.py normalized-zap.json report_json.json
+
+      - name: Upload normalized ZAP findings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: normalized-zap
+          path: normalized-zap.json
+          if-no-files-found: warn
+
+  # ───────────────────────────────────────────────────────────────────────
+  # NEW. Queries the REAL cloudcart-dev cluster's live PolicyReport/
+  # ClusterPolicyReport CRDs — Kyverno's controller is already running
+  # there (confirmed, not assumed). This is a more reliable source of
+  # truth than the offline `kyverno apply` CLI this integration originally
+  # used: PolicyReport is a stable, versioned Kubernetes API
+  # (wgpolicyk8s.io/v1alpha2), not a CLI flag whose exact output shape
+  # this session couldn't verify firsthand. See normalize_kyverno.py's
+  # docstring for the full schema detail.
+  #
+  # All policies under policies/kyverno/ are validationFailureAction:
+  # Audit (confirmed by reading every file, including the custom
+  # verify-image-cosign.yaml) — applying/updating them is report-only,
+  # never blocking, so this is safe to run unattended.
+  # ───────────────────────────────────────────────────────────────────────
+  kyverno-live-scan:
+    name: Kyverno Live PolicyReport
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code (for policies/kyverno/ and scripts/)
+        uses: actions/checkout@v6
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          version: ">= 363.0.0"
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_REGION }}
+
+      # Idempotent — creates/updates the same ClusterPolicy objects each
+      # run. Kyverno's controller picks these up immediately; existing
+      # PolicyReports get refreshed by Kyverno's own background scanner,
+      # not generated directly by this step.
+      - name: Apply Kyverno ClusterPolicies
+        run: kubectl apply -f policies/kyverno/ -R
+
+      # Background scans run on Kyverno's own periodic interval — give it
+      # a moment after apply before reading reports. Reports for policies
+      # that were already applied in a prior run will already be current
+      # regardless of this wait.
+      - name: Wait for background scan
+        run: sleep 30
+
+      - name: Collect live PolicyReports
+        id: kyverno_run
+        run: |
+          set +e
+          kubectl get policyreport -A -o json > policyreport.json
+          pr_exit=$?
+          kubectl get clusterpolicyreport -o json > clusterpolicyreport.json
+          cpr_exit=$?
+          set -e
+          if [ $pr_exit -eq 0 ] && [ $cpr_exit -eq 0 ]; then
+            # Merged into one List object — matches normalize_kyverno.py's
+            # defensive "kind: List, items: [...]" parsing path.
+            jq -s '{apiVersion: "v1", kind: "List", items: ([.[0].items, .[1].items] | flatten)}' \
+              policyreport.json clusterpolicyreport.json > kyverno-report.json
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::kubectl get policyreport/clusterpolicyreport failed (exit codes $pr_exit/$cpr_exit) — check cluster connectivity and the service account's RBAC permissions for these CRDs."
+            echo '{"apiVersion":"v1","kind":"List","items":[]}' > kyverno-report.json
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+          head -c 500 kyverno-report.json
+
+      - name: Upload raw kyverno report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kyverno-report
+          path: kyverno-report.json
+          if-no-files-found: warn
+
+      - name: Normalize kyverno findings
+        if: always()
+        run: python3 scripts/normalize_kyverno.py normalized-kyverno.json kyverno-report.json
+
+      - name: Upload normalized kyverno findings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: normalized-kyverno
+          path: normalized-kyverno.json
+          if-no-files-found: warn
+
+  # ───────────────────────────────────────────────────────────────────────
+  # NEW. KubeArmor has no persistent, queryable history of past events —
+  # karmor logs is a live gRPC stream (see normalize_kubearmor.py's
+  # docstring) — so this captures whatever happens during a bounded
+  # window of this CI run, not a snapshot of historical violations.
+  # CAPTURE_SECONDS chosen to keep the job fast; a quiet capture window
+  # legitimately produces zero findings, which doesn't mean "nothing to
+  # worry about" the way a clean kube-linter/checkov result does.
+  # ───────────────────────────────────────────────────────────────────────
+  kubearmor-live-scan:
+    name: KubeArmor Live Log Capture
+    runs-on: ubuntu-latest
+    env:
+      CAPTURE_SECONDS: 30
+    steps:
+      - name: Checkout code (for scripts/)
+        uses: actions/checkout@v6
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          version: ">= 363.0.0"
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_REGION }}
+
+      - name: Install karmor CLI
+        run: curl -sfL https://raw.githubusercontent.com/kubearmor/kubearmor-client/main/install.sh | sh -s -- -b /usr/local/bin
+
+      # Idempotent — creates/updates the same KubeArmorPolicy objects each
+      # run. All policies under policies/kubearmor/ are action: Audit
+      # (confirmed by reading every file) — report-only, never blocking,
+      # same safety reasoning as Kyverno's Audit-mode policies above.
+      - name: Apply KubeArmor policies
+        run: kubectl apply -f policies/kubearmor/ -R
+
+      # `timeout`'s exit code 124 (process killed after the time limit) is
+      # the EXPECTED outcome here, not a failure — this is a deliberately
+      # bounded capture, not karmor logs exiting on its own.
+      - name: Capture KubeArmor live logs
+        id: kubearmor_run
+        run: |
+          set +e
+          timeout "${CAPTURE_SECONDS}s" karmor logs --json --logFilter=policy --logPath=kubearmor-logs.json
+          exit_code=$?
+          set -e
+          if [ $exit_code -eq 0 ] || [ $exit_code -eq 124 ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::karmor logs exited unexpectedly (code $exit_code), not via the expected ${CAPTURE_SECONDS}s timeout — check connectivity to the kubearmor-relay service."
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+          touch kubearmor-logs.json  # in case zero events were captured in the window
+          wc -l kubearmor-logs.json
+
+      - name: Upload raw kubearmor logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kubearmor-logs
+          path: kubearmor-logs.json
+          if-no-files-found: warn
+
+      - name: Normalize kubearmor findings
+        if: always()
+        run: python3 scripts/normalize_kubearmor.py normalized-kubearmor.json kubearmor-logs.json
+
+      - name: Upload normalized kubearmor findings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: normalized-kubearmor
+          path: normalized-kubearmor.json
+          if-no-files-found: warn
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Moved verbatim from the now-retired dast.yaml — logic unchanged, still
+  # only depends on the DAST job specifically (Kyverno/KubeArmor don't
+  # touch the database).
+  # ───────────────────────────────────────────────────────────────────────
+  reset-database:
+    name: Reset Database
+    runs-on: ubuntu-latest
+    needs: zap-baseline-scan
+    if: ${{ always() && inputs.reset_database }}
+    steps:
+      - name: Checkout code (for schema.sql/seed.sql)
+        uses: actions/checkout@v6
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          version: '>= 363.0.0'
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_REGION }}
+
+      - name: Reset and reseed database
+        run: |
+          POSTGRES_POD=$(kubectl get pod -n cloudcart -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+          echo "Using pod: $POSTGRES_POD"
+
+          PGPASSWORD=$(kubectl get secret postgresql-secret -n cloudcart -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+
+          run_psql() {
+            kubectl exec -i -n cloudcart "$POSTGRES_POD" -- \
+              env PGPASSWORD="$PGPASSWORD" psql -U "${{ secrets.DB_USERNAME }}" -d "${{ secrets.DB_NAME }}" "$@"
+          }
+
+          echo "Truncating seeded tables (users excluded — see job comment)..."
+          run_psql -c "TRUNCATE order_items, orders, cart_items, reviews, products RESTART IDENTITY CASCADE;"
+
+          echo "Re-applying schema.sql (idempotent — recreates anything dropped)..."
+          run_psql < helm/postgresql/files/schema.sql
+
+          echo "Re-applying seed.sql (guaranteed to insert now that products is empty)..."
+          run_psql < helm/postgresql/files/seed.sql
+
+          echo "Reset complete."
