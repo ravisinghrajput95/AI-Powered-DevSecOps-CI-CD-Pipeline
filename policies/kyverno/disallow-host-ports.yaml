@@ -17,25 +17,27 @@ spec:
   validationFailureAction: Audit
   background: true
   rules:
-    - name: host-ports-none
-      match:
-        any:
-        - resources:
-            kinds:
-              - Pod
-      validate:
-        message: >-
-          Use of host ports is disallowed. The fields spec.containers[*].ports[*].hostPort
-          , spec.initContainers[*].ports[*].hostPort, and spec.ephemeralContainers[*].ports[*].hostPort
-          must either be unset or set to `0`.
-        pattern:
-          spec:
-            =(ephemeralContainers):
-              - =(ports):
-                  - =(hostPort): 0
-            =(initContainers):
-              - =(ports):
-                  - =(hostPort): 0
-            containers:
-              - =(ports):
-                  - =(hostPort): 0
+  - name: host-ports-none
+    match:
+      any:
+      - resources:
+          kinds:
+          - Pod
+          namespaces:
+          - cloudcart
+    validate:
+      message: >-
+        Use of host ports is disallowed. The fields spec.containers[*].ports[*].hostPort
+        , spec.initContainers[*].ports[*].hostPort, and spec.ephemeralContainers[*].ports[*].hostPort
+        must either be unset or set to `0`.
+      pattern:
+        spec:
+          =(ephemeralContainers):
+          - =(ports):
+            - =(hostPort): 0
+          =(initContainers):
+          - =(ports):
+            - =(hostPort): 0
+          containers:
+          - =(ports):
+            - =(hostPort): 0
