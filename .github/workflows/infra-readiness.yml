@@ -61,7 +61,7 @@ jobs:
             if [ -z "$INFRA_RUN_ID" ]; then
               echo "::warning::No successful infra-security-scan run found for commit $SHA — infrastructure findings will be absent. Run infra-security-scan.yaml against this commit first."
             else
-              for artifact in normalized-kubelinter kubeconform-status scan-status-infra; do
+              for artifact in normalized-kubelinter kubeconform-status scan-status-infra normalized-checkov terraform-validation-status; do
                 if gh run download "$INFRA_RUN_ID" -n "$artifact" -D inputs/ 2>/dev/null; then
                   echo "Downloaded '$artifact' from run $INFRA_RUN_ID"
                 else
@@ -81,6 +81,8 @@ jobs:
           ARGS=(--output infra_context.json --release-version "$SHA" --repository "${{ github.repository }}")
           [ -f inputs/normalized-kubelinter.json ] && ARGS+=(--kubelinter-findings inputs/normalized-kubelinter.json)
           [ -f inputs/kubeconform_status.json ] && ARGS+=(--kubeconform-status inputs/kubeconform_status.json)
+          [ -f inputs/normalized-checkov.json ] && ARGS+=(--checkov-findings inputs/normalized-checkov.json)
+          [ -f inputs/terraform_validation_status.json ] && ARGS+=(--terraform-validation inputs/terraform_validation_status.json)
           [ -f inputs/scan_status_infra.json ] && ARGS+=(--scan-status inputs/scan_status_infra.json)
 
           python3 scripts/build_infra_context.py "${ARGS[@]}"

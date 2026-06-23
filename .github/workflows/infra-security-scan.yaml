@@ -7,6 +7,7 @@ on:
     paths:
       - "helm/cloudcart/**"
       - "helm/postgresql/**"
+      - "terraform/**"
   workflow_dispatch: {}
 
 permissions:
@@ -145,11 +146,142 @@ jobs:
           path: kubeconform_status.json
           if-no-files-found: warn
 
+      # ── Terraform / Checkov — folded into this same infra-sec workflow
+      # rather than a separate one, since both are "infrastructure
+      # configuration", just two different layers (rendered K8s manifests
+      # above vs. cloud resource declarations here). Everything above this
+      # point is unchanged from the original kube-linter/kubeconform setup.
+      - name: Install checkov
+        run: pip install checkov==3.3.1
+
+      # UNLIKE kube-linter/kubeconform, checkov's exit code is genuinely
+      # meaningful: 0 = no failed checks, 1 = failed checks found (still a
+      # normal, report-only outcome here — not a tool crash), anything
+      # else = checkov itself didn't complete cleanly.
+      #
+      # Checkov also tries to phone home to api0.prismacloud.io for BC_*
+      # guideline mappings — expected to fail/warn in a sandboxed runner
+      # since the OSS CKV_* checks don't need it; confirmed non-fatal.
+      - name: Run checkov
+        id: checkov_run
+        run: |
+          set +e
+          checkov -d terraform/ --output json --compact > checkov-report.json 2> checkov-stderr.log
+          exit_code=$?
+          set -e
+          cat checkov-stderr.log || true
+          case $exit_code in
+            0) echo "checkov: no failed checks."; echo "status=success" >> "$GITHUB_OUTPUT" ;;
+            1) echo "checkov: failed checks found (report-only, not blocking)."; echo "status=success" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::warning::checkov did not complete cleanly (exit code $exit_code) — check the log above. The report may be missing or incomplete."; echo "status=failed" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+          # Extra safety net beyond exit code, same lesson as the Snyk SCA
+          # empty-result trap: a tool can exit 0/1 (looks fine) while still
+          # silently failing to parse one of the .tf files — checkov
+          # surfaces this in summary.parsing_errors, so check it explicitly.
+          if [ -s checkov-report.json ]; then
+            parsing_errors=$(jq -r '.summary.parsing_errors // 0' checkov-report.json 2>/dev/null || echo 0)
+            if [ "$parsing_errors" != "0" ]; then
+              echo "::warning::checkov reported $parsing_errors parsing error(s) — some .tf files may not have been scanned. Check checkov-stderr.log."
+              echo "status=failed" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "::warning::checkov produced no output file at all (exit code $exit_code) — likely a real failure, not a clean/findings result."
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Upload raw checkov report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: checkov-report
+          path: checkov-report.json
+          if-no-files-found: warn
+
+      - name: Normalize checkov findings
+        if: always()
+        run: python3 scripts/normalize_checkov.py normalized-checkov.json checkov-report.json
+
+      - name: Upload normalized checkov findings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: normalized-checkov
+          path: normalized-checkov.json
+          if-no-files-found: warn
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      # Schema/internal-consistency VALIDITY gate, not a source of
+      # findings — plays kubeconform's exact role, one layer over (HCL/
+      # provider schema instead of K8s manifest schema). Does not need
+      # real GCP credentials — `validate` makes no API calls, only checks
+      # syntax, internal references, and provider attribute schemas.
+      - name: terraform init (no backend, schema only)
+        working-directory: terraform
+        run: terraform init -backend=false -input=false
+
+      - name: terraform validate
+        id: terraform_validate_run
+        working-directory: terraform
+        run: |
+          set +e
+          terraform validate -json > terraform-validate.json
+          exit_code=$?
+          set -e
+          if [ ! -s terraform-validate.json ]; then
+            VALID="unknown"
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "::warning::terraform validate produced no output at all (exit code $exit_code) — likely a real failure (e.g. init didn't complete), not a validation result."
+          else
+            VALID=$(jq -r '.valid' terraform-validate.json)
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            if [ "$VALID" = "true" ]; then
+              echo "terraform validate: configuration is valid."
+            else
+              echo "::warning::terraform validate found configuration errors (see terraform-validate.json) — this is a normal validity-gate result, not a tool failure."
+            fi
+          fi
+
+          if [ -s terraform-validate.json ]; then
+            jq -n --arg valid "$VALID" --slurpfile summary terraform-validate.json \
+              '{valid: $valid, error_count: $summary[0].error_count, summary: $summary[0]}' > terraform_validation_status.json
+          else
+            jq -n --arg valid "$VALID" '{valid: $valid, error_count: null, summary: null}' > terraform_validation_status.json
+          fi
+          cat terraform_validation_status.json
+          # Copied to repo root (rather than uploaded from inside terraform/)
+          # to match every other artifact in this workflow's flat-root
+          # convention — avoids relying on untested assumptions about how
+          # upload-artifact preserves/flattens a working-directory-relative
+          # path when the artifact is later downloaded by infra-readiness.yml.
+          cp terraform_validation_status.json "$GITHUB_WORKSPACE/terraform_validation_status.json"
+          exit 0
+
+      - name: Upload terraform validation status
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: terraform-validation-status
+          path: terraform_validation_status.json
+          if-no-files-found: warn
+
       # Uses the explicit outputs captured above, NOT step outcome — both
       # scan steps deliberately end with `exit 0` so a tool finding real
       # issues doesn't fail the job (report-only), which means step outcome
       # would always read "success" regardless of what actually happened.
       # Same trap already hit once this session with the Snyk SCA jobs.
+      # scan_status_infra.json's "infrastructure" key is UNCHANGED from
+      # before — "terraform" is a new sibling key added to the same file/
+      # artifact (same artifact name: scan-status-infra), not a new file,
+      # so the existing orchestrator's download loop needs only one
+      # addition (see infra-readiness.yml) rather than a new lookup.
       - name: Record scan status
         if: always()
         run: |
@@ -158,6 +290,10 @@ jobs:
             "infrastructure": {
               "kube-linter": "${{ steps.kubelinter_run.outputs.status || 'skipped' }}",
               "kubeconform": "${{ steps.kubeconform_run.outputs.status || 'skipped' }}"
+            },
+            "terraform": {
+              "checkov": "${{ steps.checkov_run.outputs.status || 'skipped' }}",
+              "terraform-validate": "${{ steps.terraform_validate_run.outputs.status || 'skipped' }}"
             }
           }
           EOF

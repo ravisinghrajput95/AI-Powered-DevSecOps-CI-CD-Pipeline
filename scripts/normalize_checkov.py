@@ -54,6 +54,13 @@ from file_line_range via the shared build_line_field helper.
 
 Usage:
     normalize_checkov.py <output.json> <checkov_report.json>
+
+Consumed by build_infra_context.py via --checkov-findings (terraform-sec
+folds into the existing infra-sec domain rather than getting its own
+builder/workflow — kube-linter/kubeconform's existing behavior in
+build_infra_context.py and infra-security-scan.yaml is unchanged by this;
+findings stay distinguishable via the "component": "terraform" tag applied
+in build_infra_context.py, vs. "infrastructure" for kube-linter).
 """
 import json
 import sys
