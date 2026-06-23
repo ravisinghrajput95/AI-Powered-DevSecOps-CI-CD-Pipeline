@@ -257,6 +257,24 @@ TYPE_BY_CATEGORY = {
     "excessive-capabilities": "security",
     "missing-pod-isolation": "security",
     "job-lifecycle": "quality",
+
+    # Terraform (Checkov, GCP provider). Populated via direct check-id
+    # lookup in normalize_checkov.py, not regex matching — same reasoning
+    # as the kube-linter block above (Checkov's OSS output has no native
+    # severity field either; see normalize_checkov.py's docstring).
+    "open-firewall-rule": "security",
+    "workload-identity-disabled": "security",
+    "legacy-cluster-auth": "security",
+    "missing-cluster-logging-monitoring": "security",
+    "missing-network-hardening": "security",
+    "missing-rbac-hardening": "security",
+    "missing-binary-authorization": "security",
+    "excessive-iam-privilege": "security",
+    "public-storage-bucket-risk": "security",
+    "missing-storage-access-logging": "security",
+    "missing-bucket-versioning": "quality",
+    "node-hardening-gap": "security",
+    "node-pool-maintenance": "quality",
 }
 
 # Fail-safe default for "uncategorized" (and any category someone adds to
@@ -322,6 +340,25 @@ RECOMMENDATIONS_BY_CATEGORY = {
     "excessive-capabilities": "Drop all Linux capabilities (`drop: [\"ALL\"]`) and add back only the specific ones this container actually needs, rather than keeping the default set.",
     "missing-pod-isolation": "Add a NetworkPolicy scoping which pods/namespaces can actually reach this workload, rather than leaving it reachable from anything else in the cluster by default.",
     "job-lifecycle": "Set `spec.ttlSecondsAfterFinished` on Jobs so completed/failed Job objects (and their pods) are automatically cleaned up instead of accumulating indefinitely in the cluster.",
+
+    "open-firewall-rule": "Restrict the firewall rule's `source_ranges` to specific known CIDR blocks instead of 0.0.0.0/0, and scope `allow` blocks to only the ports actually required rather than a full port range.",
+    # Directly corresponds to this project's own already-confirmed real
+    # finding (Workload Identity disabled cluster-wide, bare default SA) —
+    # this is the Terraform-level root cause: node_config's
+    # workload_metadata_config.mode is set to the legacy GCE_METADATA value
+    # instead of GKE_METADATA, which is what Workload Identity requires.
+    "workload-identity-disabled": "Set `workload_metadata_config.mode = \"GKE_METADATA\"` on the node pool and enable `workload_identity_config` on the cluster, so pods can use scoped per-workload IAM identities instead of inheriting the node's Compute Engine service account.",
+    "legacy-cluster-auth": "Set `enable_legacy_abac = false` and `master_auth.client_certificate_config.issue_client_certificate = false`; rely on Kubernetes RBAC and IAM-based authentication instead of these deprecated mechanisms.",
+    "missing-cluster-logging-monitoring": "Set `logging_service` and `monitoring_service` to their Stackdriver/Cloud Operations values (e.g. \"logging.googleapis.com/kubernetes\", \"monitoring.googleapis.com/kubernetes\") instead of \"none\", so cluster activity is actually auditable.",
+    "missing-network-hardening": "Enable the flagged cluster-level network control (master authorized networks, alias IP ranges, or VPC flow logs/intranode visibility) — each narrows the cluster's network attack surface or improves traffic visibility.",
+    "missing-rbac-hardening": "Configure `authenticator_groups_config` to manage cluster RBAC access via Google Groups instead of individually-granted IAM bindings, for centralized access review.",
+    "missing-binary-authorization": "Enable Binary Authorization on the cluster so only signed, attested container images can be deployed.",
+    "excessive-iam-privilege": "Replace the basic role (Owner/Editor/Viewer) or service-account-impersonation-capable role with the narrowest predefined or custom role that covers the actual required permissions — Owner on a Compute Engine default service account is effectively full project compromise if that SA's key or node is ever exposed.",
+    "public-storage-bucket-risk": "Enable `uniform_bucket_level_access` and set the bucket's public access prevention to enforced, so objects can't be made public via legacy per-object ACLs even if a future config change tries to.",
+    "missing-storage-access-logging": "Configure a `logging` block on the bucket pointing to a separate log-sink bucket, so object access is auditable.",
+    "missing-bucket-versioning": "Enable object versioning on the bucket so an accidental overwrite or delete can be recovered rather than being permanent.",
+    "node-hardening-gap": "Enable Shielded VM Secure Boot (`shielded_instance_config.enable_secure_boot = true`) on the node pool to prevent loading unsigned/malicious boot components.",
+    "node-pool-maintenance": "Enable `management.auto_repair` and `management.auto_upgrade` on the node pool so unhealthy or outdated nodes are remediated automatically instead of silently drifting.",
 
     "uncategorized": "No automated category match was found for this rule_id/message. Since this codebase's rule_id surface is expected to be fixed and fully mapped, an uncategorized finding likely indicates a gap in classify_finding.py's CATEGORY_RULES rather than genuinely new code — inspect the rule_id below and add a matching pattern.",
 }

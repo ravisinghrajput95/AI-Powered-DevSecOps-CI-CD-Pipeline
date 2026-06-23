@@ -102,6 +102,10 @@ SEVERITY_NORMALIZATION = {
     # mapping here so tag_findings' normalize_severity call doesn't flag
     # every kube-linter finding as "unrecognized" and default it to medium.
     "kube-linter": {"critical": "critical", "high": "high", "medium": "medium", "low": "low", "informational": "informational"},
+    # Checkov's OSS output has no native per-finding severity either (see
+    # normalize_checkov.py's docstring) — same identity-mapping reasoning
+    # as kube-linter above.
+    "checkov": {"critical": "critical", "high": "high", "medium": "medium", "low": "low", "informational": "informational"},
 }
 
 
