@@ -33,11 +33,19 @@ permissions:
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────
-  # Moved verbatim from the now-retired dast.yaml — logic unchanged.
+  # Moved verbatim from the now-retired dast.yaml — logic unchanged, EXCEPT
+  # for the added `if:` below. DAST was always deliberately on-demand only
+  # (workflow_dispatch), never commit-triggered — scanning the live app has
+  # nothing to do with what changed in a given commit. The push trigger
+  # added to this workflow's `on:` block is for Kyverno/KubeArmor policy
+  # changes specifically, but `on:` is workflow-level, not job-level, so
+  # without this `if:` a policy YAML edit would silently drag a full ZAP
+  # scan along with it too. Caught from a real question, not assumed.
   # ───────────────────────────────────────────────────────────────────────
   zap-baseline-scan:
     name: ZAP Baseline Scan
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code (for scripts/)
         uses: actions/checkout@v6
