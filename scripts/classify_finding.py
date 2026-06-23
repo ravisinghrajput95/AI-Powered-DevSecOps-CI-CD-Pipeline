@@ -275,6 +275,34 @@ TYPE_BY_CATEGORY = {
     "missing-bucket-versioning": "quality",
     "node-hardening-gap": "security",
     "node-pool-maintenance": "quality",
+
+    # Kyverno. Several Kyverno checks reuse EXISTING categories above
+    # (privileged-container, host-namespace-sharing, excessive-capabilities,
+    # privilege-escalation, run-as-root, missing-resource-limits,
+    # missing-pod-isolation) since they assess the exact same underlying
+    # concept kube-linter/checkov already cover — same reasoning as
+    # checkov's CKV_GCP_12 reusing missing-pod-isolation. Only genuinely
+    # new concepts get a new category here. Populated via direct
+    # (policy, rule) lookup in normalize_kyverno.py, not regex matching.
+    "host-path-mount": "security",
+    "host-process-container": "security",
+    "unmasked-proc-mount": "security",
+    "selinux-override": "security",
+    "unrestricted-apparmor-profile": "security",
+    "missing-seccomp-profile": "security",
+    "unrestricted-volume-types": "security",
+    "unsigned-container-image": "security",
+
+    # KubeArmor. Unlike kube-linter/checkov/kyverno (fixed, known check
+    # catalogs -> direct ID lookup), KubeArmor's PolicyName is whatever
+    # arbitrary KubeArmorPolicy/KubeArmorHostPolicy someone deployed on the
+    # live cluster — unknowable in advance. Categorized by Operation
+    # instead (Process/File/Network/Syscall), a small fixed vocabulary
+    # KubeArmor itself defines — see normalize_kubearmor.py.
+    "unauthorized-process-execution": "security",
+    "unauthorized-file-access": "security",
+    "unauthorized-network-activity": "security",
+    "unauthorized-syscall": "security",
 }
 
 # Fail-safe default for "uncategorized" (and any category someone adds to
@@ -359,6 +387,25 @@ RECOMMENDATIONS_BY_CATEGORY = {
     "missing-bucket-versioning": "Enable object versioning on the bucket so an accidental overwrite or delete can be recovered rather than being permanent.",
     "node-hardening-gap": "Enable Shielded VM Secure Boot (`shielded_instance_config.enable_secure_boot = true`) on the node pool to prevent loading unsigned/malicious boot components.",
     "node-pool-maintenance": "Enable `management.auto_repair` and `management.auto_upgrade` on the node pool so unhealthy or outdated nodes are remediated automatically instead of silently drifting.",
+
+    "host-path-mount": "Remove the hostPath volume, or replace it with a narrower-scoped alternative (ConfigMap, Secret, emptyDir, or a dedicated PVC) — hostPath gives a container direct access to the node's filesystem, which is a well-known container-escape vector.",
+    "host-process-container": "Remove `securityContext.windowsOptions.hostProcess: true` — HostProcess containers run directly on the host with elevated privileges (Windows-node specific; verify this is even applicable to this cluster's node pool).",
+    "unmasked-proc-mount": "Remove `securityContext.procMount: Unmasked` (or simply leave procMount unset) so /proc stays masked using Kubernetes' default, safer configuration.",
+    "selinux-override": "Remove the custom `seLinuxOptions` override (type/user/role) and rely on the cluster/node's default SELinux configuration unless there's a specific, reviewed reason to deviate.",
+    "unrestricted-apparmor-profile": "Set an explicit AppArmor profile (`RuntimeDefault` or a custom profile) instead of `Unconfined`, so the container gets AppArmor's mandatory access control protections.",
+    "missing-seccomp-profile": "Set `securityContext.seccompProfile.type` to `RuntimeDefault` (or `Localhost` with a named profile) at the pod or container level, instead of leaving it unset/Unconfined.",
+    "unrestricted-volume-types": "Use only the Pod Security Standards' allowed volume types (configMap, secret, emptyDir, persistentVolumeClaim, downwardAPI, projected, csi for specific approved drivers) instead of unrestricted volume types like hostPath or NFS.",
+    # Directly closes the loop with this repo's own cosign keyless-signing
+    # step in backend-ci.yaml/frontend-ci.yaml — an unsigned or
+    # signature-verification-failed image reaching a Pod means the signing
+    # step either didn't run, was bypassed, or the image came from
+    # somewhere else entirely.
+    "unsigned-container-image": "Ensure the image was built and signed by the expected CI workflow (`cosign sign --yes`, keyless via GitHub Actions OIDC) before it can be deployed. If this fires on a legitimate image, confirm the signing step in backend-ci.yaml/frontend-ci.yaml actually ran and succeeded for this exact image digest.",
+
+    "unauthorized-process-execution": "Review the matched KubeArmorPolicy/KubeArmorHostPolicy (see the finding's policy name) — either the process execution is legitimate and the policy needs a corresponding allow rule, or it's genuinely unexpected and worth investigating as a possible compromise.",
+    "unauthorized-file-access": "Review the matched policy's file rules — either add an allow rule for this legitimate access pattern, or treat it as a possible unauthorized access attempt if the path/process combination is unexpected.",
+    "unauthorized-network-activity": "Review the matched policy's network rules — either the connection is expected and needs an allow rule, or it's unexpected outbound/inbound activity worth investigating (e.g. unexpected destination, port, or protocol).",
+    "unauthorized-syscall": "Review the matched policy's syscall rules — confirm whether this specific syscall is genuinely needed by the workload or should be tightened further.",
 
     "uncategorized": "No automated category match was found for this rule_id/message. Since this codebase's rule_id surface is expected to be fixed and fully mapped, an uncategorized finding likely indicates a gap in classify_finding.py's CATEGORY_RULES rather than genuinely new code — inspect the rule_id below and add a matching pattern.",
 }

@@ -1,0 +1,33 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: ksp-backend-audit-icmp
+  namespace: cloudcart
+  annotations:
+    description: >-
+      CUSTOM policy. NOTE on scope: KubeArmorPolicy's network section only
+      matches by protocol (icmp/tcp/udp/raw), not destination IP — IP/CIDR-
+      based matching only exists on the separate KubeArmorNetworkPolicy
+      kind, which is node-scoped via nodeSelector only (no pod-level
+      selector), confirmed across multiple KubeArmor docs pages. An
+      earlier plan for this policy set considered blocking backend egress
+      to the GCE metadata IP (169.254.169.254) specifically — directly
+      relevant to the SSRF-to-metadata path mentioned in this app's DAST
+      scope notes — but that would require a NODE-wide policy affecting
+      every pod on the node (backend/frontend/postgres all share one node
+      pool), and would risk interfering with GKE's own legitimate
+      metadata-server traffic for cluster-internal purposes. Dropped as
+      not worth that blast radius/risk; this Audit-only ICMP policy is
+      kept instead as a low-risk demonstration that the network domain is
+      covered by this policy set, not left out by oversight.
+spec:
+  severity: 2
+  message: "ICMP traffic observed from the backend container"
+  tags: ["network-visibility"]
+  selector:
+    matchLabels:
+      app: cloudcart-backend
+  network:
+    matchProtocols:
+      - protocol: icmp
+  action: Audit

@@ -1,4 +1,4 @@
-name: Infra Security Scan (kube-linter + kubeconform)
+name: Infra Security Scan
 
 on:
   push:
@@ -106,11 +106,31 @@ jobs:
       # reliable signal (0 = valid, non-zero = validation/processing
       # issues) — not attempting to deeply parse per-error JSON fields,
       # since this stays a pass/fail fact, not detailed findings.
+      #
+      # -schema-location additions (2026-06-23): kubeconform's built-in
+      # "default" schemas only cover native Kubernetes types, not CRDs —
+      # confirmed via a real run that this app's ServiceMonitor
+      # (monitoring.coreos.com/v1, from the Prometheus Operator) failed
+      # with "could not find schema for ServiceMonitor", which isn't a
+      # real manifest problem, just a missing schema source. Second
+      # -schema-location points at datreeio/CRDs-catalog (the standard
+      # community catalog, officially recommended in kubeconform's own
+      # README) using kubeconform's documented {{.Group}}/{{.ResourceKind}}
+      # _{{.ResourceAPIVersion}}.json template — verified this resolves to
+      # a real schema for this exact CRD before adding it here.
+      # -ignore-missing-schemas added alongside it so a FUTURE CRD that's
+      # in neither catalog degrades to "skipped" rather than flipping the
+      # whole gate to invalid again, the same class of false signal this
+      # fix addresses today.
       - name: Run kubeconform (schema validity gate)
         id: kubeconform_run
         run: |
           set +e
-          kubeconform -summary -output json rendered/cloudcart.yaml rendered/postgresql.yaml > kubeconform-summary.json
+          kubeconform -summary -output json \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -ignore-missing-schemas \
+            rendered/cloudcart.yaml rendered/postgresql.yaml > kubeconform-summary.json
           exit_code=$?
           set -e
           if [ ! -s kubeconform-summary.json ]; then
@@ -282,6 +302,13 @@ jobs:
       # artifact (same artifact name: scan-status-infra), not a new file,
       # so the existing orchestrator's download loop needs only one
       # addition (see infra-readiness.yml) rather than a new lookup.
+      #
+      # Kyverno/KubeArmor moved OUT of this workflow (2026-06-23) — they're
+      # runtime/admission-time tools grouped with DAST in a separate
+      # workflow instead, since this workflow is for static, build-time
+      # checks only (kube-linter, kubeconform, checkov, terraform validate
+      # all assess config/manifests without anything running). See the
+      # runtime-security workflow for kyverno/kubearmor/dast.
       - name: Record scan status
         if: always()
         run: |

@@ -1,0 +1,35 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: ksp-backend-audit-sensitive-files
+  namespace: cloudcart
+  annotations:
+    description: >-
+      CUSTOM policy. Covers the other classic post-exploitation file
+      targets besides the service account token (handled separately, see
+      ksp-cloudcart-audit-serviceaccount-token-access.yaml) — credential
+      files an attacker would look for after gaining code execution on the
+      backend, none of which the Flask app has any legitimate reason to
+      read at runtime.
+spec:
+  severity: 5
+  message: "Sensitive credential file accessed in the backend container"
+  tags: ["MITRE-T1552", "credential-access-defense"]
+  selector:
+    matchLabels:
+      app: cloudcart-backend
+  file:
+    matchPaths:
+      - path: /etc/shadow
+        readOnly: true
+    matchDirectories:
+      - dir: /root/.ssh/
+        recursive: true
+        readOnly: true
+      - dir: /root/.config/gcloud/
+        recursive: true
+        readOnly: true
+      - dir: /root/.aws/
+        recursive: true
+        readOnly: true
+  action: Audit
