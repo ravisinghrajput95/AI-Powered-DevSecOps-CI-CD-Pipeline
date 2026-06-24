@@ -1,5 +1,5 @@
 # VULN: Outdated base image with known CVEs
-FROM python:3.7-slim
+FROM python:3.14-slim
 
 # VULN: Running as root (no USER directive)
 WORKDIR /app
