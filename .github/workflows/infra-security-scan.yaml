@@ -1,4 +1,4 @@
-name: Infra Security Scan
+name: Infra Security Scan (kube-linter + kubeconform)
 
 on:
   push:
@@ -149,11 +149,19 @@ jobs:
 
           # jq, not an embedded Python heredoc — avoids the multi-line-
           # string-inside-a-YAML-block-scalar indentation trap.
+          #
+          # The `| if ... then true elif ... then false else null end`
+          # conversion matters: --arg always binds a STRING even when its
+          # content is the text "true" — confirmed this was producing
+          # "valid": "true"/"false" as strings, not native JSON booleans.
+          # null (not a third "unknown" string) represents the no-
+          # determinate-answer case, so the field stays cleanly bool|null.
           if [ -s kubeconform-summary.json ]; then
             jq -n --arg valid "$VALID" --slurpfile summary kubeconform-summary.json \
-              '{valid: $valid, summary: $summary[0]}' > kubeconform_status.json
+              '{valid: ($valid | if . == "true" then true elif . == "false" then false else null end), summary: $summary[0]}' > kubeconform_status.json
           else
-            jq -n --arg valid "$VALID" '{valid: $valid, summary: null}' > kubeconform_status.json
+            jq -n --arg valid "$VALID" \
+              '{valid: ($valid | if . == "true" then true elif . == "false" then false else null end), summary: null}' > kubeconform_status.json
           fi
           cat kubeconform_status.json
           exit 0
@@ -271,9 +279,10 @@ jobs:
 
           if [ -s terraform-validate.json ]; then
             jq -n --arg valid "$VALID" --slurpfile summary terraform-validate.json \
-              '{valid: $valid, error_count: $summary[0].error_count, summary: $summary[0]}' > terraform_validation_status.json
+              '{valid: ($valid | if . == "true" then true elif . == "false" then false else null end), error_count: $summary[0].error_count, summary: $summary[0]}' > terraform_validation_status.json
           else
-            jq -n --arg valid "$VALID" '{valid: $valid, error_count: null, summary: null}' > terraform_validation_status.json
+            jq -n --arg valid "$VALID" \
+              '{valid: ($valid | if . == "true" then true elif . == "false" then false else null end), error_count: null, summary: null}' > terraform_validation_status.json
           fi
           cat terraform_validation_status.json
           # Copied to repo root (rather than uploaded from inside terraform/)
