@@ -305,6 +305,68 @@ jobs:
           name: release-context
           path: release_context.json
 
+      # ── Compose step: the ONE merge point. final_release_context.json is
+      # what every downstream consumer (AI agent, Markdown, Slack, PR
+      # comment, dashboard) should read — never release_context.json or
+      # infra_context.json directly. Per the frozen v1.0 design: infra_sec
+      # isn't commit-tied the way app-sec is (infra-security-scan.yaml only
+      # triggers on helm/**, terraform/** changes), so this deliberately
+      # grabs the LATEST successful "Infra Readiness Assessment" run rather
+      # than one matching this exact SHA — a matching one almost never
+      # exists for a pure app-code commit. The version mismatch this
+      # produces is expected and surfaced as provenance data by
+      # compose_release_context.py itself, not something to resolve here.
+      - name: Find latest InfraContext
+        id: find_infra_context
+        run: |
+          INFRA_WORKFLOW_ID=$(gh api "repos/${{ github.repository }}/actions/workflows" \
+            --jq '.workflows[] | select(.name=="Infra Readiness Assessment") | .id' | head -n1)
+
+          if [ -z "$INFRA_WORKFLOW_ID" ]; then
+            echo "::warning::No workflow named 'Infra Readiness Assessment' found — composing without infra/terraform findings."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            INFRA_RUN_ID=$(gh run list --workflow="$INFRA_WORKFLOW_ID" --status=success \
+              --json databaseId --jq '.[0].databaseId')
+            if [ -z "$INFRA_RUN_ID" ]; then
+              echo "::warning::Found the workflow but no successful run — composing without infra/terraform findings."
+              echo "found=false" >> "$GITHUB_OUTPUT"
+            elif gh run download "$INFRA_RUN_ID" -n infra-context -D inputs/ 2>/dev/null; then
+              echo "found=true" >> "$GITHUB_OUTPUT"
+              echo "Downloaded infra_context.json from run $INFRA_RUN_ID"
+            else
+              echo "::warning::Run $INFRA_RUN_ID succeeded but its 'infra-context' artifact wasn't found."
+              echo "found=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Compose final ReleaseContext
+        run: |
+          if [ "${{ steps.find_infra_context.outputs.found }}" = "true" ]; then
+            python3 scripts/compose_release_context.py \
+              --output final_release_context.json \
+              --release-context release_context.json \
+              --infra-context inputs/infra_context.json
+          else
+            # No infra_context.json available at all (not even a stale
+            # one) — compose still has to run so downstream consumers have
+            # exactly one place to read from, never falling back to
+            # release_context.json directly.
+            echo "{\"release\":{\"repository\":\"${{ github.repository }}\"},\"findings\":[],\"remediation_guide\":{},\"scan_status\":{}}" > /tmp/empty_infra_context.json
+            python3 scripts/compose_release_context.py \
+              --output final_release_context.json \
+              --release-context release_context.json \
+              --infra-context /tmp/empty_infra_context.json
+          fi
+
+      - name: Upload final ReleaseContext
+        uses: actions/upload-artifact@v7
+        with:
+          name: final-release-context
+          path: final_release_context.json
+
       # ── Phase 2: AI analysis — only runs if explicitly requested ─────────
       - name: Run AI Security Analysis
         if: ${{ inputs.run_ai_analysis }}
@@ -312,7 +374,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           python3 scripts/run_security_analysis.py \
-            --release-context release_context.json \
+            --release-context final_release_context.json \
             --system-prompt scripts/system_prompt.md \
             --output release_report.md
 

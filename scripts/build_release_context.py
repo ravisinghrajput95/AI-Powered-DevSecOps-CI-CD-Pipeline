@@ -68,6 +68,7 @@ Usage:
         [--scan-status scan_status.json]
 """
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -150,6 +151,82 @@ def load_json(path, default):
         return default
 
 
+
+# Domains for the AI Release Intelligence Agent's reasoning/reporting
+# organization — NOT a partitioning of findings[] (that stays flat, per the
+# frozen v1.0 contract). Purely a derived tag, computed once, centrally,
+# rather than duplicated per-normalizer — same Option A precedent as
+# tag_findings/component itself.
+#
+# Verified against the real schema before writing this (not assumed):
+# - Syft/SBOM NEVER appears in findings[] at all — it's deliberately a
+#   separate schema (sbom_summary), per normalize_sbom.py's own docstring
+#   ("NOT intended to be passed into merge_findings.py... no severity, no
+#   confidence, nothing actionable on its own"). So container_security
+#   detection only ever needs to look at Snyk's package_manager field, not
+#   tool=="syft".
+# - Snyk is the ONE tool whose `component` value alone is ambiguous between
+#   layers: container scans and SCA manifest scans both report tool="snyk"
+#   and component="backend"/"frontend" (deliberately, for cross-
+#   correlation — see normalize_snyk.py's module docstring). The real
+#   disambiguating signal is package_manager: "deb"/"rpm"/"apk" (OS-level,
+#   from a container scan) vs "pip"/"npm" (manifest-level, from an SCA
+#   scan). Confirmed this app's actual images report "deb".
+DOMAIN_BY_COMPONENT = {
+    "infrastructure": "infrastructure_security",
+    "terraform": "infrastructure_security",
+    "deployed-app": "runtime_security",
+    # "backend"/"frontend" are NOT listed here — see assign_domain, they
+    # need the extra package_manager check Snyk's ambiguity requires.
+}
+CONTAINER_LAYER_PACKAGE_MANAGERS = {"deb", "rpm", "apk"}
+SCA_LAYER_PACKAGE_MANAGERS = {"pip", "npm"}
+DOMAIN_ORDER = {
+    "application_security": 0,
+    "infrastructure_security": 1,
+    "runtime_security": 2,
+    "container_security": 3,
+}
+
+
+def assign_domain(finding):
+    """Deterministic domain assignment — see DOMAIN_BY_COMPONENT/
+    CONTAINER_LAYER_PACKAGE_MANAGERS above for what this is verified
+    against. Called once, centrally (by compose_release_context.py),
+    not duplicated per-normalizer or per-builder."""
+    component = finding.get("component")
+
+    if component in DOMAIN_BY_COMPONENT:
+        return DOMAIN_BY_COMPONENT[component]
+
+    if component in ("backend", "frontend"):
+        pm = finding.get("package_manager")
+        if pm in CONTAINER_LAYER_PACKAGE_MANAGERS:
+            return "container_security"
+        if pm in SCA_LAYER_PACKAGE_MANAGERS or pm is None:
+            return "application_security"
+        # A real, unrecognized package_manager value — loud, not silent,
+        # same pattern as every normalizer's "unmatched X" warning. Default
+        # to application_security (the less consequential miscount of the
+        # two directions) rather than guessing it's a container finding.
+        print(
+            f"WARNING: unrecognized package_manager {pm!r} for a {component} finding "
+            f"(tool={finding.get('tool')!r}, rule_id={finding.get('rule_id')!r}) — add it "
+            f"to CONTAINER_LAYER_PACKAGE_MANAGERS or SCA_LAYER_PACKAGE_MANAGERS in "
+            f"assign_domain(). Defaulting to application_security.",
+            file=sys.stderr,
+        )
+        return "application_security"
+
+    print(
+        f"WARNING: unrecognized component {component!r} — no domain mapping exists for "
+        f"it. Add it to DOMAIN_BY_COMPONENT in assign_domain(). Defaulting to "
+        f"application_security.",
+        file=sys.stderr,
+    )
+    return "application_security"
+
+
 def tag_findings(findings, component):
     """Add component + a not-yet-available delta_status to each finding,
     rather than silently omitting the field (which would let the prompt
@@ -227,7 +304,16 @@ def group_findings(findings, remediation_guide):
 
         key = (f.get("component"), f.get("tool"), f.get("rule_id"), f.get("category"))
         if key not in groups:
+            # Hash of the exact tuple that's ALREADY the proven, collision-
+            # free grouping key above — not new entropy, just making an
+            # existing uniqueness guarantee externally referenceable
+            # (Slack/dashboard links, historical tracking). Stable across
+            # releases for "the same logical finding" by construction: the
+            # same root cause always produces the same key, regardless of
+            # how many occurrences exist in any given run.
+            finding_id = hashlib.sha256("|".join(str(k) for k in key).encode()).hexdigest()[:12]
             groups[key] = {
+                "finding_id": finding_id,
                 "component": f.get("component"),
                 "tool": f.get("tool"),
                 "rule_id": f.get("rule_id"),
@@ -235,13 +321,21 @@ def group_findings(findings, remediation_guide):
                 "category": f.get("category"),
                 "type": f.get("type"),
                 "confidence": f.get("confidence"),
-                "delta_status": f.get("delta_status", "unknown"),
                 "occurrence_count": 0,
                 "locations": [],
                 "sample_message": f.get("message"),
                 "remediation_notes": [],
                 "original_severities": [],
             }
+            # Only included when a real delta computation has actually been
+            # performed — currently never (no release-to-release baseline
+            # exists yet, see this function's module docstring). Omitted
+            # rather than serialized as a constant "unknown" on every
+            # single finding; downstream .get("delta_status", "unknown")
+            # reads identically either way, so this changes no behavior,
+            # just avoids paying tokens for an always-default value.
+            if f.get("delta_status") and f["delta_status"] != "unknown":
+                groups[key]["delta_status"] = f["delta_status"]
             # Present only for findings that carry them (currently Snyk).
             # rule_id already uniquely identifies a specific package for
             # Snyk's ID scheme, so these are consistent across every member
@@ -277,6 +371,8 @@ def group_findings(findings, remediation_guide):
         if note and note not in g["remediation_notes"]:
             g["remediation_notes"].append(note)
 
+    MAX_LOCATIONS_SAMPLE = 15
+
     result = []
     for key in order:
         g = groups[key]
@@ -293,6 +389,20 @@ def group_findings(findings, remediation_guide):
             g["original_severity"] = original_severities[0]
         elif len(original_severities) > 1:
             g["original_severities"] = original_severities
+
+        # Capped, not removed — occurrence_count already carries the scale
+        # signal, so a representative sample preserves reasoning quality
+        # without paying tokens for dozens of near-identical entries. This
+        # is a demonstrated failure mode, not premature optimization: a
+        # real bug this session produced a 77-entry locations array on one
+        # finding before it was fixed, and the same growth happens
+        # legitimately (not as a bug) the moment any single rule matches
+        # many resources in a larger fleet.
+        if len(g["locations"]) > MAX_LOCATIONS_SAMPLE:
+            g["total_locations"] = len(g["locations"])
+            g["locations"] = g["locations"][:MAX_LOCATIONS_SAMPLE]
+            g["locations_truncated"] = True
+
         result.append(g)
     return result
 
@@ -346,6 +456,7 @@ def compute_release_statistics(findings):
     by_severity = {}
     by_category = {}
     by_component = {}
+    by_domain = {}
     for f in findings:
         # Lowercased here ONLY for this aggregate bucket — different tools
         # report severity in different cases (SonarCloud: "MEDIUM", ZAP:
@@ -357,11 +468,21 @@ def compute_release_statistics(findings):
         by_severity[severity_key] = by_severity.get(severity_key, 0) + 1
         by_category[f["category"]] = by_category.get(f["category"], 0) + 1
         by_component[f["component"]] = by_component.get(f["component"], 0) + 1
+        # .get() not [] deliberately — the two partial builders
+        # (build_release_context.py/build_infra_context.py) call this
+        # BEFORE domain assignment happens (that's compose_release_
+        # context.py's job, on the fully merged set), so their own
+        # by_domain output is harmless/meaningless and gets discarded
+        # regardless — "recompute release_statistics... should NOT rely on
+        # partial statistics generated by builders" per the agreed design.
+        domain_key = f.get("domain", "unassigned")
+        by_domain[domain_key] = by_domain.get(domain_key, 0) + 1
     return {
         "total_findings": len(findings),
         "by_severity": by_severity,
         "by_category": by_category,
         "by_component": by_component,
+        "by_domain": by_domain,
     }
 
 

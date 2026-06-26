@@ -76,6 +76,25 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_release_context import tag_findings, group_findings, compute_release_statistics, load_json
 
 
+def _coerce_valid_field(validation_dict):
+    """Defensive coercion for kubeconform_status.json/terraform_validation_
+    status.json's "valid" field — these were produced as STRINGS
+    ("true"/"false"/"unknown") by a real, confirmed bug: `jq -n --arg valid
+    "$VALID"` always binds a string regardless of $VALID's content, even
+    when it's the text "true". Fixed at the source (infra-security-
+    scan.yaml's jq calls now convert to native true/false/null before this
+    function ever sees them) — this stays here anyway so ALREADY-PRODUCED
+    artifacts from before that fix still load with the correct type
+    without needing a fresh CI run, and as a backstop against any future
+    producer reintroducing the same string-binding mistake."""
+    if validation_dict is None:
+        return validation_dict
+    valid = validation_dict.get("valid")
+    if isinstance(valid, str):
+        validation_dict["valid"] = {"true": True, "false": False}.get(valid.lower())  # "unknown" or anything else -> None
+    return validation_dict
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--output", required=True)
@@ -113,14 +132,16 @@ def main():
         )
 
     # Factual pass/fail gate, not a finding — see KNOWN LIMITATIONS above.
-    default_kubeconform = {"valid": "unknown", "error_count": None, "summary": None}
-    schema_validation = load_json(args.kubeconform_status, default_kubeconform)
+    # "valid" is bool|null, not a string — see _coerce_valid_field below for
+    # why this needs defending against rather than just declared.
+    default_kubeconform = {"valid": None, "error_count": None, "summary": None}
+    schema_validation = _coerce_valid_field(load_json(args.kubeconform_status, default_kubeconform))
 
     # terraform validate's equivalent gate — same default shape as
     # kubeconform's, kept as a separate sibling field (see KNOWN
     # LIMITATIONS #1 above for why it's not merged into schema_validation).
-    default_terraform_validation = {"valid": "unknown", "error_count": None, "summary": None}
-    terraform_validation = load_json(args.terraform_validation, default_terraform_validation)
+    default_terraform_validation = {"valid": None, "error_count": None, "summary": None}
+    terraform_validation = _coerce_valid_field(load_json(args.terraform_validation, default_terraform_validation))
 
     infra_context = {
         "release": {
