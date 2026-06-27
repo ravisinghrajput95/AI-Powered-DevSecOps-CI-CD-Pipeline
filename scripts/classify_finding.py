@@ -100,6 +100,10 @@ CATEGORY_RULES = [
     # Misc JS code smells — maintainability only, no security signal.
     (r"nested ternary|imported multiple times|prefer `?number\.parse|unexpected negated condition|ambiguous spacing", "code-quality"),
 
+    # Confirmed from a real first run (javascript:S5914) — a tautological
+    # assertion in test code, not a security issue.
+    (r"replace this assertion; it always succeeds or fails", "code-quality"),
+
     # ZAP baseline scan's standard alert catalog — these names are part of a
     # stable, well-known rule set used across virtually every ZAP baseline
     # scan, so this is added proactively rather than waiting for real output.
