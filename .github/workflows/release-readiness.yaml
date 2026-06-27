@@ -438,9 +438,19 @@ jobs:
             --release-context final_release_context.json \
             --output release_report.md
 
+      - name: Render HTML report
+        if: ${{ inputs.run_ai_analysis }}
+        run: |
+          python3 scripts/render_html_report.py \
+            --executive-report executive_report.json \
+            --release-context final_release_context.json \
+            --output release_report.html
+
       - name: Upload AI Security Report
         if: ${{ inputs.run_ai_analysis }}
         uses: actions/upload-artifact@v7
         with:
           name: release-security-report
-          path: release_report.md
+          path: |
+            release_report.md
+            release_report.html
