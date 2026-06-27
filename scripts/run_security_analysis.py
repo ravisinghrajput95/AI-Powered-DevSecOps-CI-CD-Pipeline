@@ -13,7 +13,7 @@ its text response. This is a deliberate reliability choice: free-text JSON
 risks preamble, code-fence wrapping, or truncation mid-object; a forced
 tool call doesn't.
 
-The tool's input_schema is DERIVED from executive_report.schema.json at
+The tool's input_schema is DERIVED from executive_report_schema.SCHEMA at
 runtime (the AI-authored subset: executive_summary, cross_domain_
 correlations, top_risks, priority_actions, release_readiness,
 assumptions_and_unknowns) rather than hand-duplicated — one schema, one
@@ -25,7 +25,7 @@ are the model's job:
 1. Python adds report_id/generated_at/release_context_ref — the model
    never invents its own identifier for its own output.
 2. The COMPLETE object (model output + Python-added fields) is validated
-   against executive_report.schema.json. A schema violation is a hard
+   against executive_report_schema.SCHEMA. A schema violation is a hard
    failure, not a warning — an ExecutiveReport that doesn't conform isn't
    safe for any renderer to consume.
 3. Every finding_id cited in any supporting_evidence/blocking_evidence
@@ -50,7 +50,6 @@ real output the same way every other piece was.
 Usage:
     run_security_analysis.py --release-context final_release_context.json \\
         --system-prompt scripts/system_prompt.md \\
-        --schema scripts/executive_report.schema.json \\
         --output executive_report.json \\
         [--model claude-sonnet-4-6] [--max-tokens 8192]
 
@@ -76,6 +75,9 @@ except ImportError:
     )
     sys.exit(1)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from executive_report_schema import SCHEMA
+
 API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 TOOL_NAME = "submit_executive_report"
@@ -98,7 +100,7 @@ def load_text(path):
 
 
 def build_tool_schema(full_schema):
-    """Derive the tool's input_schema from executive_report.schema.json —
+    """Derive the tool's input_schema from executive_report_schema.SCHEMA —
     the AI-authored subset only. One schema, no hand-duplicated second
     copy that could drift from it."""
     ai_properties = {k: v for k, v in full_schema["properties"].items() if k not in PYTHON_OWNED_FIELDS}
@@ -233,7 +235,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--release-context", required=True)
     parser.add_argument("--system-prompt", required=True)
-    parser.add_argument("--schema", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument(
         "--model", default=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
@@ -254,8 +255,8 @@ def main():
         sys.exit(1)
 
     system_prompt = load_text(args.system_prompt)
-    full_schema = load_json(args.schema)
-    jsonschema.Draft202012Validator.check_schema(full_schema)  # the schema file itself must be valid
+    full_schema = SCHEMA
+    jsonschema.Draft202012Validator.check_schema(full_schema)  # SCHEMA itself must be valid
 
     release_context_text = load_text(args.release_context)
     try:
@@ -283,7 +284,7 @@ def main():
     except jsonschema.ValidationError as e:
         print(
             f"FATAL: the assembled ExecutiveReport does not conform to "
-            f"{args.schema}: {e.message} (at {'.'.join(str(p) for p in e.path)}). "
+            f"executive_report_schema.SCHEMA: {e.message} (at {'.'.join(str(p) for p in e.path)}). "
             f"Not writing a non-conformant artifact — this is a hard failure, not a "
             f"warning, since no renderer should be asked to consume an invalid contract.",
             file=sys.stderr,

@@ -30,6 +30,14 @@ rendered with an explicit "[unresolved reference]" marker rather than
 silently dropped or causing a crash — a broken citation should be visibly
 broken, not invisible.
 
+Validates the input against the SAME schema run_security_analysis.py
+validates against before writing it, rather than trusting that the
+producer already did. If this script's own key-access code (e.g.
+report["release_readiness"]["recommendation"]) ever drifts out of sync
+with a future schema change, this is where that should surface — as a
+clear validation error naming the field, not a KeyError three functions
+deep that looks unrelated to the actual cause.
+
 Future renderers (HTML, PDF, a Backstage plugin) do the same two
 resolution jobs against the same two input files; only the output format
 differs. This file is the Markdown one.
@@ -41,7 +49,22 @@ Usage:
 """
 import argparse
 import json
+import os
 import sys
+
+try:
+    import jsonschema
+except ImportError:
+    print(
+        "FATAL: the 'jsonschema' package is required (pip install jsonschema). "
+        "Same dependency reasoning as run_security_analysis.py — see that file's "
+        "docstring.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from executive_report_schema import SCHEMA
 
 
 def load_json(path):
@@ -252,6 +275,24 @@ def main():
 
     report = load_json(args.executive_report)
     release_context = load_json(args.release_context)
+
+    # The producer (run_security_analysis.py) already validated before
+    # writing this file — but this script shouldn't TRUST that just
+    # because it's true today. If the schema changes a field name and
+    # this renderer's key-access code isn't updated to match, that's
+    # exactly the kind of drift the schema exists to catch — and it
+    # should be caught HERE, as a clear validation error, not three
+    # functions deep as an unrelated-looking KeyError.
+    try:
+        jsonschema.validate(report, SCHEMA)
+    except jsonschema.ValidationError as e:
+        print(
+            f"FATAL: {args.executive_report} does not conform to executive_report_schema.SCHEMA: "
+            f"{e.message} (at {'.'.join(str(p) for p in e.path)}). Refusing to "
+            f"render a non-conformant artifact.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     markdown = render_markdown(report, release_context)
 
