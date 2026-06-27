@@ -113,7 +113,7 @@ def build_tool_schema(full_schema):
     }
 
 
-def call_claude(system_prompt, release_context_json, tool_schema, model, max_tokens, api_key):
+def build_initial_messages(release_context_json):
     user_message = (
         "Analyze the following final_release_context.json and call "
         f"{TOOL_NAME} with your complete ExecutiveReport analysis, exactly "
@@ -122,12 +122,20 @@ def call_claude(system_prompt, release_context_json, tool_schema, model, max_tok
         f"{release_context_json}\n"
         "```"
     )
+    return [{"role": "user", "content": user_message}]
 
+
+def call_claude(messages, tool_schema, system_prompt, model, max_tokens, api_key):
+    """One API call. Takes a full messages list, not just the initial
+    user message — this is what makes the corrective retry in main()
+    possible: a retry is just this same function called again with two
+    more turns appended (the model's prior tool_use, and a tool_result
+    telling it what was wrong), not a different code path."""
     payload = {
         "model": model,
         "max_tokens": max_tokens,
         "system": system_prompt,
-        "messages": [{"role": "user", "content": user_message}],
+        "messages": messages,
         "tools": [
             {
                 "name": TOOL_NAME,
@@ -164,6 +172,25 @@ def call_claude(system_prompt, release_context_json, tool_schema, model, max_tok
         print(f"FATAL: could not reach the Anthropic API: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
+    # Diagnostics printed HERE, unconditionally, for every attempt — not
+    # only after a successful downstream validation. Confirmed via a real
+    # run: the original code only logged stop_reason/token usage after
+    # validation passed, so the first real validation failure gave no way
+    # to tell whether it was caused by truncation (stop_reason: max_tokens)
+    # or the model simply omitting a field within budget. Both are now
+    # visible on every attempt, pass or fail.
+    usage = body.get("usage", {})
+    print(
+        f"  [attempt] tokens: {usage.get('input_tokens', '?')} in / {usage.get('output_tokens', '?')} out, "
+        f"stop_reason: {body.get('stop_reason', '?')}"
+    )
+    if body.get("stop_reason") == "max_tokens":
+        print(
+            "  ::warning:: stopped at max_tokens — the tool call may be truncated/incomplete. "
+            "Consider raising --max-tokens.",
+            file=sys.stderr,
+        )
+
     tool_use_blocks = [b for b in body.get("content", []) if b.get("type") == "tool_use" and b.get("name") == TOOL_NAME]
     if not tool_use_blocks:
         print(
@@ -179,7 +206,8 @@ def call_claude(system_prompt, release_context_json, tool_schema, model, max_tok
             file=sys.stderr,
         )
 
-    return tool_use_blocks[0]["input"], body
+    block = tool_use_blocks[0]
+    return block["input"], block["id"], body
 
 
 def compute_report_id(version, generated_at):
@@ -242,7 +270,13 @@ def main():
              "tradeoff for a job that runs on every release; claude-opus-4-7 is the upgrade "
              "path if report quality, not cost, turns out to be the binding constraint.",
     )
-    parser.add_argument("--max-tokens", type=int, default=8192)
+    parser.add_argument(
+        "--max-tokens", type=int, default=16384,
+        help="Raised from an earlier default of 8192 after a real run with 54 findings — "
+             "6 structured sections with evidence citations across that many findings can "
+             "genuinely need more room. Now that every attempt logs its actual token usage "
+             "(see call_claude), it'll be obvious from the logs if this still isn't enough.",
+    )
     args = parser.parse_args()
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -273,20 +307,63 @@ def main():
     )
 
     tool_schema = build_tool_schema(full_schema)
-    ai_output, raw_response = call_claude(
-        system_prompt, release_context_text, tool_schema, args.model, args.max_tokens, api_key
-    )
+    messages = build_initial_messages(release_context_text)
 
-    report = assemble_executive_report(ai_output, release_context)
+    # MAX_ATTEMPTS=2: one corrective retry, not an open-ended loop.
+    # Confirmed via a real run that this is a real, recoverable failure
+    # mode — the model called the tool but omitted a required field
+    # (assumptions_and_unknowns) entirely. The correction is via a proper
+    # tool_result with is_error: true, the API's actual documented
+    # mechanism for "your tool call had a problem, fix it and call
+    # again" — not an improvised follow-up user message.
+    MAX_ATTEMPTS = 2
+    report = None
+    last_error = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        print(f"Calling the model (attempt {attempt}/{MAX_ATTEMPTS})...")
+        ai_output, tool_use_id, raw_response = call_claude(
+            messages, tool_schema, system_prompt, args.model, args.max_tokens, api_key
+        )
+        candidate_report = assemble_executive_report(ai_output, release_context)
 
-    try:
-        jsonschema.validate(report, full_schema)
-    except jsonschema.ValidationError as e:
+        try:
+            jsonschema.validate(candidate_report, full_schema)
+            report = candidate_report
+            break
+        except jsonschema.ValidationError as e:
+            last_error = e
+            error_path = ".".join(str(p) for p in e.path) or "(top level)"
+            print(
+                f"  ::warning:: attempt {attempt} produced a non-conforming ExecutiveReport: "
+                f"{e.message} (at {error_path})",
+                file=sys.stderr,
+            )
+            if attempt < MAX_ATTEMPTS:
+                messages.append({
+                    "role": "assistant",
+                    "content": [{"type": "tool_use", "id": tool_use_id, "name": TOOL_NAME, "input": ai_output}],
+                })
+                messages.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "is_error": True,
+                        "content": (
+                            f"Your {TOOL_NAME} call did not conform to the required schema: "
+                            f"{e.message} (at {error_path}). Call {TOOL_NAME} again with the "
+                            f"complete, corrected object — every required field populated."
+                        ),
+                    }],
+                })
+
+    if report is None:
+        error_path = ".".join(str(p) for p in last_error.path) or "(top level)"
         print(
-            f"FATAL: the assembled ExecutiveReport does not conform to "
-            f"executive_report_schema.SCHEMA: {e.message} (at {'.'.join(str(p) for p in e.path)}). "
-            f"Not writing a non-conformant artifact — this is a hard failure, not a "
-            f"warning, since no renderer should be asked to consume an invalid contract.",
+            f"FATAL: after {MAX_ATTEMPTS} attempts, the model never produced a schema-conforming "
+            f"ExecutiveReport. Last error: {last_error.message} (at {error_path}). Not writing "
+            f"a non-conformant artifact — this is a hard failure, not a warning, since no "
+            f"renderer should be asked to consume an invalid contract.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -294,18 +371,9 @@ def main():
     with open(args.output, "w") as f:
         json.dump(report, f, indent=2)
 
-    usage = raw_response.get("usage", {})
     print(f"Wrote ExecutiveReport -> {args.output}")
     print(f"  report_id: {report['report_id']}")
     print(f"  recommendation: {report['release_readiness']['recommendation']}")
-    print(f"  tokens: {usage.get('input_tokens', '?')} in / {usage.get('output_tokens', '?')} out")
-    print(f"  stop_reason: {raw_response.get('stop_reason', '?')}")
-    if raw_response.get("stop_reason") == "max_tokens":
-        print(
-            "  ::warning:: stopped at max_tokens — the tool call may have been truncated. "
-            "Re-run with a higher --max-tokens.",
-            file=sys.stderr,
-        )
 
     # See module docstring point 3 and the function's own docstring for
     # exactly which real bug this check exists to catch.
