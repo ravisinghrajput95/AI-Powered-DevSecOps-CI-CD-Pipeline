@@ -160,10 +160,15 @@ more than one) for citing the tool's exact original wording, `category`,
 `type` (security/quality), `confidence`, `domain` (application_security/
 infrastructure_security/runtime_security/container_security — derived
 from `component` + package layer, not a partition; correlate across all
-of them), `occurrence_count`, `locations` (a SAMPLE, not necessarily
-complete — check `total_locations`/`locations_truncated`; a large
-`total_locations` with few `locations` shown is still one finding, one
-root cause, not many), `sample_message`, `remediation_notes` (optional,
+of them), `occurrence_count`. NOTE: the `locations` array itself is
+stripped before this data reaches you — you architecturally never cite
+anything but `finding_id` (see "Never duplicate a finding's content into
+your output" above), so the raw location strings would only cost tokens
+for data you're not allowed to use directly anyway. `total_locations`
+(when present) IS still here, since that scale fact does belong in your
+prioritization reasoning — a finding with `total_locations: 28` is one
+widespread root cause, not 28 separate problems. `sample_message`,
+`remediation_notes` (optional,
 occurrence-specific detail layered on top of `remediation_guide`),
 `package_name`/`package_version`/`package_manager` (Snyk only — when
 `package_manager` is `deb`/`rpm`/`apk` it's a container OS-layer finding;
