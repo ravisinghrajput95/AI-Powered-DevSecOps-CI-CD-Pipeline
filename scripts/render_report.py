@@ -1,46 +1,25 @@
 #!/usr/bin/env python3
 """
-The Renderer. Takes ExecutiveReport.json (AI reasoning, no presentation
-markup) + final_release_context.json (the evidence it references by
-finding_id) and produces release_report.md.
+The Markdown Renderer. Takes ExecutiveReport.json (AI reasoning, no
+presentation markup) + final_release_context.json (the evidence it
+references by finding_id) and produces release_report.md.
 
 This is a genuinely separate component, not just a conceptually-separate
 section of run_security_analysis.py — per the frozen three-layer
 separation, the AI never touches Markdown, and this script never touches
-the model. It's also the thing the "evidence by reference, not by
-duplication" design only pays off through: ExecutiveReport.json on its
-own is small and full of bare finding_id strings; this is the layer that
-resolves those references back into the actual citable detail (rule_id,
-severity, category, message) a human reading the rendered report needs,
-without the AI ever having had to retype that detail itself.
+the model.
 
-Two resolution jobs, both deterministic, neither requiring any reasoning:
-1. finding_id references in *_evidence arrays -> the real finding's
-   rule_id/severity/category/message, looked up from
-   final_release_context.json's findings[] by finding_id.
-2. assumptions_and_unknowns[].related_to pointers (e.g.
-   "scan_status.backend.codeql", "provenance.infrastructure_security")
-   -> the actual value at that path in final_release_context.json. The
-   AI only ever states the IMPACT of a gap; this is where the gap's
-   actual value gets shown.
+Shared resolution logic (finding_id lookup, related_to pointer
+resolution, schema validation) lives in renderer_common.py — the HTML
+renderer (render_html_report.py) uses the exact same logic, only the
+output format differs. See renderer_common.py's docstring for why this
+is shared rather than duplicated.
 
 A finding_id that doesn't resolve (the exact failure mode
 run_security_analysis.py's verify_finding_id_references() checks for) is
 rendered with an explicit "[unresolved reference]" marker rather than
 silently dropped or causing a crash — a broken citation should be visibly
 broken, not invisible.
-
-Validates the input against the SAME schema run_security_analysis.py
-validates against before writing it, rather than trusting that the
-producer already did. If this script's own key-access code (e.g.
-report["release_readiness"]["recommendation"]) ever drifts out of sync
-with a future schema change, this is where that should surface — as a
-clear validation error naming the field, not a KeyError three functions
-deep that looks unrelated to the actual cause.
-
-Future renderers (HTML, PDF, a Backstage plugin) do the same two
-resolution jobs against the same two input files; only the output format
-differs. This file is the Markdown one.
 
 Usage:
     render_report.py --executive-report executive_report.json \\
@@ -52,42 +31,8 @@ import json
 import os
 import sys
 
-try:
-    import jsonschema
-except ImportError:
-    print(
-        "FATAL: the 'jsonschema' package is required (pip install jsonschema). "
-        "Same dependency reasoning as run_security_analysis.py — see that file's "
-        "docstring.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from executive_report_schema import SCHEMA
-
-
-def load_json(path):
-    with open(path, "r") as f:
-        return json.load(f)
-
-
-def build_finding_lookup(release_context):
-    return {f["finding_id"]: f for f in release_context.get("findings", []) if f.get("finding_id")}
-
-
-def resolve_pointer(release_context, dotted_path):
-    """Walks a dotted path like 'scan_status.backend.codeql' or
-    'provenance.infrastructure_security' into final_release_context.json.
-    Returns None if any segment doesn't resolve — the caller renders that
-    as an explicit gap, not a crash."""
-    node = release_context
-    for segment in dotted_path.split("."):
-        if isinstance(node, dict) and segment in node:
-            node = node[segment]
-        else:
-            return None
-    return node
+from renderer_common import load_and_validate, build_finding_lookup, resolve_pointer, RECOMMENDATION_LABELS
 
 
 def cite(finding_lookup, finding_id):
@@ -194,7 +139,7 @@ def render_release_readiness(rr, finding_lookup):
     lines.append(f"**Blocking evidence:** {cite_list(finding_lookup, rr['blocking_evidence'])}")
     lines.append("")
     if rr["conditions"]:
-        lines.append("**Conditions for approval:**")
+        lines.append("**Conditions:**")
         for cond in rr["conditions"]:
             lines.append(f"- {cond}")
         lines.append("")
@@ -220,13 +165,8 @@ def render_assumptions(assumptions, release_context):
 
 def render_final_recommendation(rr):
     lines = ["## Final Recommendation", ""]
-    badge = {
-        "APPROVE": "✅ APPROVE",
-        "APPROVE_WITH_CONDITIONS": "⚠️ APPROVE WITH CONDITIONS",
-        "MANUAL_REVIEW_REQUIRED": "🔍 MANUAL REVIEW REQUIRED",
-        "DO_NOT_APPROVE": "❌ DO NOT APPROVE",
-    }[rr["recommendation"]]
-    lines.append(f"### {badge}")
+    icon = {"APPROVE": "✅", "APPROVE_WITH_CONDITIONS": "⚠️", "MANUAL_REVIEW_REQUIRED": "🔍", "DO_NOT_APPROVE": "❌"}[rr["recommendation"]]
+    lines.append(f"### {icon} {RECOMMENDATION_LABELS[rr['recommendation']].upper()}")
     lines.append("")
     lines.append(rr["rationale"])
     lines.append("")
@@ -273,27 +213,7 @@ def main():
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
-    report = load_json(args.executive_report)
-    release_context = load_json(args.release_context)
-
-    # The producer (run_security_analysis.py) already validated before
-    # writing this file — but this script shouldn't TRUST that just
-    # because it's true today. If the schema changes a field name and
-    # this renderer's key-access code isn't updated to match, that's
-    # exactly the kind of drift the schema exists to catch — and it
-    # should be caught HERE, as a clear validation error, not three
-    # functions deep as an unrelated-looking KeyError.
-    try:
-        jsonschema.validate(report, SCHEMA)
-    except jsonschema.ValidationError as e:
-        print(
-            f"FATAL: {args.executive_report} does not conform to executive_report_schema.SCHEMA: "
-            f"{e.message} (at {'.'.join(str(p) for p in e.path)}). Refusing to "
-            f"render a non-conformant artifact.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
+    report, release_context = load_and_validate(args.executive_report, args.release_context)
     markdown = render_markdown(report, release_context)
 
     with open(args.output, "w") as f:
