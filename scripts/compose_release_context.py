@@ -347,6 +347,7 @@ def main():
         "sbom_summary": release_ctx.get("sbom_summary"),
         "dependency_summary": release_ctx.get("dependency_summary"),
         "supply_chain": supply_chain,
+        "signal_availability": release_ctx.get("signal_availability"),
         "schema_validation": infra_ctx.get("schema_validation"),
         "terraform_validation": infra_ctx.get("terraform_validation"),
     }
