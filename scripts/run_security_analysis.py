@@ -1,66 +1,95 @@
 #!/usr/bin/env python3
 """
 The AI Release Intelligence Engine. Takes one already-validated, canonical
-final_release_context.json and produces an executive Markdown report.
+final_release_context.json and produces a structured ExecutiveReport.json
+— the canonical AI reasoning contract. Does NOT produce Markdown/HTML —
+that's the Renderer's job (see render_report.py), a separate component
+downstream of this one, per the frozen three-layer separation:
+ReleaseContext -> AI Release Intelligence -> ExecutiveReport.json -> Renderer.
 
-This is the ONLY AI step in the entire pipeline. Per the frozen
-architecture: Python owns every deterministic computation upstream of
-this (normalization, aggregation, domain classification, statistics,
-provenance) — this script's only job is to call the model once with that
-already-complete evidence and the system prompt, and write whatever comes
-back. It does not parse, re-derive, or validate the security content of
-the response — that would be exactly the kind of "AI reinterpreting
-deterministic facts" the system prompt explicitly forbids the MODEL from
-doing, and it would be just as wrong for this script to do it either.
+Gets structured output via forced tool-use (tool_choice pinned to a single
+tool, submit_executive_report), not by asking the model to emit JSON in
+its text response. This is a deliberate reliability choice: free-text JSON
+risks preamble, code-fence wrapping, or truncation mid-object; a forced
+tool call doesn't.
 
-The one thing this script DOES check deterministically: whether the
-report's Final Recommendation section actually contains one of the four
-allowed values. That's a cheap, mechanical format check — not a judgment
-about whether the recommendation is correct — and it's a separate concern
-from the AI's instructions, the same way a linter checking "did this PR
-include a Final Recommendation heading" is different from reviewing
-whether the recommendation itself is sound.
+The tool's input_schema is DERIVED from executive_report.schema.json at
+runtime (the AI-authored subset: executive_summary, cross_domain_
+correlations, top_risks, priority_actions, release_readiness,
+assumptions_and_unknowns) rather than hand-duplicated — one schema, one
+source of truth, no drift between what the tool accepts and what the
+final artifact is validated against.
 
-UNVALIDATED AGAINST A REAL API CALL — same caveat every other piece of
-this pipeline started with. No Anthropic API key was available in the
-environment this was built in (confirmed: api.anthropic.com is reachable
-from that sandbox, returns 401 with no credentials — a network path
-exists, credentials don't). Built correctly against the documented
-Messages API shape, but the first real invocation is what actually proves
-this, the same way every other script in this pipeline only became
-trustworthy after a real run surfaced and fixed something. Share the
-first real release_report.md (and, if anything looks off, the raw API
-response) the same way every other "first real run" got handled this
-session.
+Three deterministic things happen AFTER the model responds, none of which
+are the model's job:
+1. Python adds report_id/generated_at/release_context_ref — the model
+   never invents its own identifier for its own output.
+2. The COMPLETE object (model output + Python-added fields) is validated
+   against executive_report.schema.json. A schema violation is a hard
+   failure, not a warning — an ExecutiveReport that doesn't conform isn't
+   safe for any renderer to consume.
+3. Every finding_id cited in any supporting_evidence/blocking_evidence
+   array is checked against the REAL finding_id set in
+   final_release_context.json. This exists because of a real, observed
+   failure: the first real run of this engine cited the same finding
+   twice with two slightly different finding_ids (a transposed-character
+   transcription error re-typing a 12-char hex string from memory). A
+   forced-tool-call schema constrains SHAPE (12 hex chars) but not
+   EXISTENCE (a real finding's actual id) — this check catches what the
+   schema can't.
+
+UNVALIDATED AGAINST A REAL TOOL-USE API CALL specifically — the prior
+free-text version of this script WAS validated against a real run (see
+git history / prior release_report.md). This tool-use rewrite changes the
+request shape (tools + tool_choice) but not the auth/network path, which
+was already confirmed working. Same expectation as every other "first
+real run" this pipeline has had: share the first real executive_report.json
+(and raw API response, if anything looks off) so this can be fixed against
+real output the same way every other piece was.
 
 Usage:
     run_security_analysis.py --release-context final_release_context.json \\
         --system-prompt scripts/system_prompt.md \\
-        --output release_report.md \\
+        --schema scripts/executive_report.schema.json \\
+        --output executive_report.json \\
         [--model claude-sonnet-4-6] [--max-tokens 8192]
 
 Requires ANTHROPIC_API_KEY in the environment.
 """
 import argparse
+import hashlib
 import json
 import os
 import sys
 import urllib.request
 import urllib.error
+from datetime import datetime, timezone
+
+try:
+    import jsonschema
+except ImportError:
+    print(
+        "FATAL: the 'jsonschema' package is required (pip install jsonschema). "
+        "Hand-rolling JSON Schema validation would reinvent a well-solved problem "
+        "poorly — this is a deliberate dependency, not an oversight.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
+TOOL_NAME = "submit_executive_report"
 
-# Matches the four values mandated by the system prompt's Final
-# Recommendation section — checked mechanically after the fact, not
-# something this script tells the model (that instruction lives entirely
-# in system_prompt.md, this is just a format sanity check on the result).
-ALLOWED_RECOMMENDATIONS = (
-    "APPROVE WITH CONDITIONS",  # checked before the plain "APPROVE" substring it contains
-    "MANUAL REVIEW REQUIRED",
-    "DO NOT APPROVE",
-    "APPROVE",
-)
+# The Python-owned fields — never part of the tool's input_schema, always
+# added after the model responds. See module docstring point 1.
+PYTHON_OWNED_FIELDS = {"schema_version", "report_id", "generated_at", "release_context_ref"}
+
+FINDING_ID_PATTERN_FIELDS = ("supporting_evidence", "blocking_evidence")
+
+
+def load_json(path):
+    with open(path, "r") as f:
+        return json.load(f)
 
 
 def load_text(path):
@@ -68,12 +97,25 @@ def load_text(path):
         return f.read()
 
 
-def call_claude(system_prompt, release_context_json, model, max_tokens, api_key):
+def build_tool_schema(full_schema):
+    """Derive the tool's input_schema from executive_report.schema.json —
+    the AI-authored subset only. One schema, no hand-duplicated second
+    copy that could drift from it."""
+    ai_properties = {k: v for k, v in full_schema["properties"].items() if k not in PYTHON_OWNED_FIELDS}
+    ai_required = [k for k in full_schema["required"] if k not in PYTHON_OWNED_FIELDS]
+    return {
+        "type": "object",
+        "required": ai_required,
+        "additionalProperties": False,
+        "properties": ai_properties,
+    }
+
+
+def call_claude(system_prompt, release_context_json, tool_schema, model, max_tokens, api_key):
     user_message = (
-        "Analyze the following final_release_context.json and produce the "
-        "Release Intelligence Report exactly as specified in your "
-        "instructions — the full 9-section Markdown document, ending in "
-        "exactly one Final Recommendation.\n\n"
+        "Analyze the following final_release_context.json and call "
+        f"{TOOL_NAME} with your complete ExecutiveReport analysis, exactly "
+        "as specified in your instructions.\n\n"
         "```json\n"
         f"{release_context_json}\n"
         "```"
@@ -84,6 +126,18 @@ def call_claude(system_prompt, release_context_json, model, max_tokens, api_key)
         "max_tokens": max_tokens,
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_message}],
+        "tools": [
+            {
+                "name": TOOL_NAME,
+                "description": (
+                    "Submit the completed ExecutiveReport analysis of the provided "
+                    "final_release_context.json. Call this exactly once, with every "
+                    "required field populated."
+                ),
+                "input_schema": tool_schema,
+            }
+        ],
+        "tool_choice": {"type": "tool", "name": TOOL_NAME},
     }
 
     request = urllib.request.Request(
@@ -108,31 +162,78 @@ def call_claude(system_prompt, release_context_json, model, max_tokens, api_key)
         print(f"FATAL: could not reach the Anthropic API: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
-    text_blocks = [block["text"] for block in body.get("content", []) if block.get("type") == "text"]
-    if not text_blocks:
+    tool_use_blocks = [b for b in body.get("content", []) if b.get("type") == "tool_use" and b.get("name") == TOOL_NAME]
+    if not tool_use_blocks:
         print(
-            f"FATAL: API response had no text content. Full response: "
-            f"{json.dumps(body, indent=2)}",
+            f"FATAL: no {TOOL_NAME} tool_use block in the response despite forced "
+            f"tool_choice. Full response: {json.dumps(body, indent=2)}",
             file=sys.stderr,
         )
         sys.exit(1)
+    if len(tool_use_blocks) > 1:
+        print(
+            f"::warning:: model called {TOOL_NAME} {len(tool_use_blocks)} times; "
+            f"using the first call only.",
+            file=sys.stderr,
+        )
 
-    return "".join(text_blocks), body
+    return tool_use_blocks[0]["input"], body
 
 
-def check_recommendation_format(report_text):
-    """Mechanical format check only — see module docstring for why this
-    isn't a judgment call about the recommendation's correctness."""
-    for value in ALLOWED_RECOMMENDATIONS:
-        if value in report_text:
-            return value
-    return None
+def compute_report_id(version, generated_at):
+    return hashlib.sha256(f"{version}{generated_at}".encode("utf-8")).hexdigest()[:16]
+
+
+def assemble_executive_report(ai_output, release_context):
+    """Adds the Python-owned fields — see module docstring point 1. The
+    model never sees or invents these."""
+    release = release_context.get("release", {})
+    generated_at = datetime.now(timezone.utc).isoformat()
+    release_context_ref = {
+        "repository": release.get("repository"),
+        "version": release.get("version"),
+        "generated_at": release.get("generated_at"),
+    }
+    report = {
+        "schema_version": "1.0.0",
+        "report_id": compute_report_id(release.get("version", ""), generated_at),
+        "generated_at": generated_at,
+        "release_context_ref": release_context_ref,
+    }
+    report.update(ai_output)
+    return report
+
+
+def verify_finding_id_references(report, real_finding_ids):
+    """See module docstring point 3 — this exists because of a real,
+    observed citation error, not a hypothetical one. Returns the list of
+    invalid (location, finding_id) pairs found; does not raise — this is
+    a warning-worthy data-quality signal, not a reason to discard an
+    otherwise-valid report."""
+    problems = []
+
+    def walk(obj, path):
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if key in FINDING_ID_PATTERN_FIELDS and isinstance(value, list):
+                    for fid in value:
+                        if fid not in real_finding_ids:
+                            problems.append((path + "." + key, fid))
+                else:
+                    walk(value, path + "." + key)
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                walk(item, f"{path}[{i}]")
+
+    walk(report, "executive_report")
+    return problems
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--release-context", required=True)
     parser.add_argument("--system-prompt", required=True)
+    parser.add_argument("--schema", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument(
         "--model", default=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
@@ -153,49 +254,72 @@ def main():
         sys.exit(1)
 
     system_prompt = load_text(args.system_prompt)
-    release_context_json = load_text(args.release_context)
+    full_schema = load_json(args.schema)
+    jsonschema.Draft202012Validator.check_schema(full_schema)  # the schema file itself must be valid
 
-    # Sanity-check the input is at least valid JSON before spending an API
-    # call on it — fail fast and cheap rather than send malformed input to
-    # the model and get back a confused report.
+    release_context_text = load_text(args.release_context)
     try:
-        parsed = json.loads(release_context_json)
+        release_context = json.loads(release_context_text)
     except json.JSONDecodeError as e:
         print(f"FATAL: {args.release_context} is not valid JSON: {e}", file=sys.stderr)
         sys.exit(1)
 
-    finding_count = len(parsed.get("findings", []))
-    print(f"Analyzing {finding_count} findings from {args.release_context} (model: {args.model})...")
-
-    report_text, raw_response = call_claude(
-        system_prompt, release_context_json, args.model, args.max_tokens, api_key
+    real_finding_ids = {f.get("finding_id") for f in release_context.get("findings", []) if f.get("finding_id")}
+    print(
+        f"Analyzing {len(release_context.get('findings', []))} findings "
+        f"({len(real_finding_ids)} distinct finding_ids) from {args.release_context} "
+        f"(model: {args.model})..."
     )
 
+    tool_schema = build_tool_schema(full_schema)
+    ai_output, raw_response = call_claude(
+        system_prompt, release_context_text, tool_schema, args.model, args.max_tokens, api_key
+    )
+
+    report = assemble_executive_report(ai_output, release_context)
+
+    try:
+        jsonschema.validate(report, full_schema)
+    except jsonschema.ValidationError as e:
+        print(
+            f"FATAL: the assembled ExecutiveReport does not conform to "
+            f"{args.schema}: {e.message} (at {'.'.join(str(p) for p in e.path)}). "
+            f"Not writing a non-conformant artifact — this is a hard failure, not a "
+            f"warning, since no renderer should be asked to consume an invalid contract.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     with open(args.output, "w") as f:
-        f.write(report_text)
+        json.dump(report, f, indent=2)
 
     usage = raw_response.get("usage", {})
-    print(f"Wrote report -> {args.output} ({len(report_text)} chars)")
+    print(f"Wrote ExecutiveReport -> {args.output}")
+    print(f"  report_id: {report['report_id']}")
+    print(f"  recommendation: {report['release_readiness']['recommendation']}")
     print(f"  tokens: {usage.get('input_tokens', '?')} in / {usage.get('output_tokens', '?')} out")
     print(f"  stop_reason: {raw_response.get('stop_reason', '?')}")
     if raw_response.get("stop_reason") == "max_tokens":
         print(
-            "  ::warning:: stopped at max_tokens — the report was very likely truncated "
-            "mid-section. Re-run with a higher --max-tokens.",
+            "  ::warning:: stopped at max_tokens — the tool call may have been truncated. "
+            "Re-run with a higher --max-tokens.",
             file=sys.stderr,
         )
 
-    recommendation = check_recommendation_format(report_text)
-    if recommendation:
-        print(f"  Final Recommendation detected: {recommendation}")
-    else:
+    # See module docstring point 3 and the function's own docstring for
+    # exactly which real bug this check exists to catch.
+    bad_refs = verify_finding_id_references(report, real_finding_ids)
+    if bad_refs:
         print(
-            "  ::warning:: none of the four required Final Recommendation values "
-            "(APPROVE / APPROVE WITH CONDITIONS / MANUAL REVIEW REQUIRED / DO NOT APPROVE) "
-            "were found in the report text. This is a format check only, not a content "
-            "judgment — but a human should look at the raw report before trusting it.",
+            f"  ::warning:: {len(bad_refs)} cited finding_id(s) do not exist in "
+            f"{args.release_context}'s real findings — likely a transcription error citing "
+            f"the same finding twice with slightly different ids:",
             file=sys.stderr,
         )
+        for location, fid in bad_refs:
+            print(f"    {location}: {fid!r}", file=sys.stderr)
+    else:
+        print(f"  All cited finding_id references verified against real findings.")
 
 
 if __name__ == "__main__":

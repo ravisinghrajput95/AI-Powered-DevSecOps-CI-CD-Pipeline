@@ -368,14 +368,35 @@ jobs:
           path: final_release_context.json
 
       # ── Phase 2: AI analysis — only runs if explicitly requested ─────────
-      - name: Run AI Security Analysis
+      # ── Phase 2: AI Release Intelligence — only runs if explicitly requested ──
+      # Two genuinely separate steps, per the frozen three-layer separation:
+      # AI Release Intelligence -> ExecutiveReport.json -> Renderer -> Markdown.
+      # The AI step never produces Markdown; the renderer never calls the model.
+      - name: Run AI Release Intelligence Engine
         if: ${{ inputs.run_ai_analysis }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          pip install jsonschema --break-system-packages -q
           python3 scripts/run_security_analysis.py \
             --release-context final_release_context.json \
             --system-prompt scripts/system_prompt.md \
+            --schema scripts/executive_report.schema.json \
+            --output executive_report.json
+
+      - name: Upload ExecutiveReport
+        if: ${{ inputs.run_ai_analysis }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: executive-report
+          path: executive_report.json
+
+      - name: Render Markdown report
+        if: ${{ inputs.run_ai_analysis }}
+        run: |
+          python3 scripts/render_report.py \
+            --executive-report executive_report.json \
+            --release-context final_release_context.json \
             --output release_report.md
 
       - name: Upload AI Security Report
