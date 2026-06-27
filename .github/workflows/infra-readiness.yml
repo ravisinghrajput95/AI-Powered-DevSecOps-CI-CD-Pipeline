@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_sha:
-        description: "Commit SHA to assess (defaults to this ref's HEAD if left blank)"
+        description: "Commit SHA to assess. Leave blank to use the latest successful infra-security-scan.yaml run instead (recommended default — infra-security-scan.yaml only triggers on helm/**, terraform/** changes, so it rarely shares a commit with whatever triggered this run). Only set this if you specifically need infra config as of one exact historical commit."
         required: false
         type: string
 
@@ -28,24 +28,51 @@ jobs:
         run: |
           SHA="${{ inputs.release_sha }}"
           if [ -z "$SHA" ]; then
-            SHA="${{ github.sha }}"
+            # FIXED 2026-06-27, confirmed via a real run: this used to
+            # default to github.sha (HEAD of whatever triggered this
+            # workflow) and then required an EXACT match against
+            # infra-security-scan.yaml's artifacts for that same commit.
+            # That's correct when release_sha is explicitly given (someone
+            # specifically wants "infra config as of commit X"), but wrong
+            # as a default — a manual run with no input left this matching
+            # HEAD of main, which almost never has a matching
+            # infra-security-scan.yaml run (that workflow only triggers on
+            # helm/**, terraform/** changes), producing an empty
+            # infra_context.json that release-readiness.yaml's "latest
+            # successful run" lookup then picked up as if it were real
+            # data — masking genuinely current checkov/kube-linter
+            # findings that existed from an earlier commit. use_latest
+            # decouples "which run to pull artifacts from" (always the
+            # latest successful infra-security-scan.yaml run, unless a
+            # specific commit was explicitly requested) from "what commit
+            # to label the result as" (the matched run's REAL headSha, set
+            # below — not this unresolved placeholder).
+            echo "use_latest=true" >> "$GITHUB_OUTPUT"
+            SHA="${{ github.sha }}"  # placeholder only; overwritten below once the real source run is known
+          else
+            echo "use_latest=false" >> "$GITHUB_OUTPUT"
           fi
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "Assessing commit: $SHA"
+          echo "Assessing commit: $SHA (use_latest=$([ -z "${{ inputs.release_sha }}" ] && echo true || echo false))"
 
       # Resolved by workflow NAME via the Actions API, not by filename via
       # `gh run list --workflow=<file>.yml` — the latter requires the file
       # to exist on the default branch under that exact name to resolve at
       # all, which already caused a real 404 once this session (the DAST
-      # workflow's actual filename didn't match what was assumed). This is
-      # tied to a commit (unlike DAST, which scans a live target and has no
-      # SHA to match against) — so unlike DAST's "grab the latest, record
-      # staleness" approach, this looks for a run matching the exact SHA
-      # being assessed.
+      # workflow's actual filename didn't match what was assumed).
+      #
+      # use_latest=true (the default — see resolve_sha above): grabs the
+      # latest successful infra-security-scan.yaml run regardless of SHA,
+      # same "latest, not matched" philosophy DAST/Kyverno/KubeArmor
+      # already use, and captures that run's REAL headSha so the result
+      # gets labeled with the commit the data actually came from.
+      # use_latest=false (explicit release_sha input given): preserves
+      # the original exact-match behavior for assessing a specific commit.
       - name: Download infra scan artifacts
         id: download
         env:
           SHA: ${{ steps.resolve_sha.outputs.sha }}
+          USE_LATEST: ${{ steps.resolve_sha.outputs.use_latest }}
         run: |
           mkdir -p inputs
 
@@ -54,13 +81,40 @@ jobs:
 
           if [ -z "$INFRA_WORKFLOW_ID" ]; then
             echo "::warning::No workflow named 'Infra Security Scan (kube-linter + kubeconform)' found via the Actions API — infrastructure findings will be absent. Check that infra-security-scan.yaml has been pushed and run at least once, and that its name: field matches exactly."
+            echo "actual_sha=$SHA" >> "$GITHUB_OUTPUT"
           else
-            INFRA_RUN_ID=$(gh run list --workflow="$INFRA_WORKFLOW_ID" --status=success \
-              --json databaseId,headSha --jq ".[] | select(.headSha == \"$SHA\") | .databaseId" | head -n1)
+            if [ "$USE_LATEST" = "true" ]; then
+              INFRA_RUN_JSON=$(gh run list --workflow="$INFRA_WORKFLOW_ID" --status=success \
+                --json databaseId,headSha --jq '.[0]')
+            else
+              # Explicit, separate `jq -c` rather than gh's built-in --jq —
+              # not confident `gh run list --jq` passes jq's own flags
+              # (like -c) through correctly, and this sandbox has no `gh`
+              # binary to verify it against. A plain jq call's behavior was
+              # already directly confirmed, so route through that instead
+              # of an unverified shortcut. -c (compact, one line per
+              # object) matters here specifically because jq's default
+              # pretty-printed output spans multiple lines per object,
+              # which silently breaks `head -n1` below — it would grab
+              # only the first LINE ("{") of the first match, not the full
+              # object, producing invalid JSON for the next jq call.
+              # Confirmed by actually testing this exact pattern, not
+              # assumed — caught before it ever ran for real.
+              RAW_RUNS=$(gh run list --workflow="$INFRA_WORKFLOW_ID" --status=success \
+                --json databaseId,headSha)
+              INFRA_RUN_JSON=$(echo "$RAW_RUNS" | jq -c ".[] | select(.headSha == \"$SHA\")" | head -n1)
+            fi
+            INFRA_RUN_ID=$(echo "$INFRA_RUN_JSON" | jq -r '.databaseId // empty')
+            ACTUAL_SHA=$(echo "$INFRA_RUN_JSON" | jq -r '.headSha // empty')
 
             if [ -z "$INFRA_RUN_ID" ]; then
-              echo "::warning::No successful infra-security-scan run found for commit $SHA — infrastructure findings will be absent. Run infra-security-scan.yaml against this commit first."
+              echo "::warning::No successful infra-security-scan run found $([ "$USE_LATEST" = "true" ] && echo "at all" || echo "for commit $SHA") — infrastructure findings will be absent."
+              echo "actual_sha=$SHA" >> "$GITHUB_OUTPUT"
             else
+              if [ "$USE_LATEST" = "true" ]; then
+                echo "Using latest successful infra-security-scan run ($INFRA_RUN_ID, commit $ACTUAL_SHA) — not necessarily this workflow's own target commit."
+              fi
+              echo "actual_sha=$ACTUAL_SHA" >> "$GITHUB_OUTPUT"
               for artifact in normalized-kubelinter kubeconform-status scan-status-infra normalized-checkov terraform-validation-status; do
                 if gh run download "$INFRA_RUN_ID" -n "$artifact" -D inputs/ 2>/dev/null; then
                   echo "Downloaded '$artifact' from run $INFRA_RUN_ID"
@@ -76,7 +130,7 @@ jobs:
 
       - name: Build InfraContext
         env:
-          SHA: ${{ steps.resolve_sha.outputs.sha }}
+          SHA: ${{ steps.download.outputs.actual_sha }}
         run: |
           ARGS=(--output infra_context.json --release-version "$SHA" --repository "${{ github.repository }}")
           [ -f inputs/normalized-kubelinter.json ] && ARGS+=(--kubelinter-findings inputs/normalized-kubelinter.json)
