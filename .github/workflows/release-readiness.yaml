@@ -381,7 +381,6 @@ jobs:
           python3 scripts/run_security_analysis.py \
             --release-context final_release_context.json \
             --system-prompt scripts/system_prompt.md \
-            --schema scripts/executive_report.schema.json \
             --output executive_report.json
 
       - name: Upload ExecutiveReport
