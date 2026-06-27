@@ -41,6 +41,11 @@ tool:
    since it reads as precise and isn't).
 5. **`release_readiness`** — the deployment recommendation, with
    rationale and the specific evidence that's actually blocking it.
+   `conditions` is what would need to change to move toward a more
+   favorable recommendation — useful for ANY recommendation value, not
+   just `APPROVE_WITH_CONDITIONS` (e.g. for `DO_NOT_APPROVE`, list what
+   would need to be true for this to become approvable). `null` only
+   when there's truly nothing actionable to list.
 6. **`assumptions_and_unknowns`** — every gap, every stale signal, every
    `not_collected` dimension. Each entry's `related_to` is a POINTER into
    `final_release_context.json` (e.g. `"scan_status.backend.codeql"`,
