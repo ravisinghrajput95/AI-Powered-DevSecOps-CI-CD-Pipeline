@@ -52,12 +52,51 @@ jobs:
           SHA: ${{ steps.resolve_sha.outputs.sha }}
         run: |
           mkdir -p inputs
+          echo "{}" > inputs/app_sec_provenance.json
 
+          # FIXED 2026-06-27, mirroring the proven infra-readiness.yml fix:
+          # this used to ONLY match the exact target SHA, which meant any
+          # commit that didn't touch backend/**/frontend/** (e.g. a pure
+          # scripts/ or workflow change) got ZERO app-sec data — every real
+          # report so far has shown CodeQL/SonarCloud/GitGuardian/Snyk SCA
+          # as SKIPPED because of exactly this. Falls back to the latest
+          # successful run per workflow when no exact match exists, and
+          # records which REAL commit was actually used — backend and
+          # frontend can genuinely diverge (different last-touched
+          # commits), so this is tracked per workflow, not as one global
+          # assumption. Surfaced later as real provenance data, never a
+          # silent assumption of freshness — same philosophy as every
+          # other staleness-tracking fix in this pipeline.
           find_run_id() {
             local workflow=$1
-            gh run list --workflow="$workflow" --status=success \
+            local run_id sha exact_match
+
+            run_id=$(gh run list --workflow="$workflow" --status=success \
               --json databaseId,headSha --jq ".[] | select(.headSha == \"$SHA\") | .databaseId" \
-              | head -n1
+              | head -n1)
+
+            if [ -n "$run_id" ]; then
+              sha="$SHA"
+              exact_match="true"
+            else
+              local latest
+              latest=$(gh run list --workflow="$workflow" --status=success \
+                --json databaseId,headSha --jq '.[0]')
+              run_id=$(echo "$latest" | jq -r '.databaseId // empty')
+              sha=$(echo "$latest" | jq -r '.headSha // empty')
+              exact_match="false"
+              if [ -n "$run_id" ]; then
+                echo "::warning::No successful run of $workflow found for commit $SHA — using latest successful run instead (commit $sha)."
+              fi
+            fi
+
+            if [ -n "$run_id" ]; then
+              jq --arg wf "$workflow" --arg sha "$sha" --arg exact "$exact_match" \
+                '.[$wf] = {source_version: $sha, exact_match: ($exact == "true")}' \
+                inputs/app_sec_provenance.json > /tmp/provenance_tmp.json && mv /tmp/provenance_tmp.json inputs/app_sec_provenance.json
+            fi
+
+            echo "$run_id"
           }
 
           download_or_warn() {
@@ -281,6 +320,7 @@ jobs:
           SHA: ${{ steps.resolve_sha.outputs.sha }}
         run: |
           ARGS=(--output release_context.json --release-version "$SHA" --repository "${{ github.repository }}")
+          [ -f inputs/app_sec_provenance.json ] && ARGS+=(--app-sec-provenance inputs/app_sec_provenance.json)
           [ -f inputs/security-findings-backend.json ] && ARGS+=(--backend-findings inputs/security-findings-backend.json)
           [ -f inputs/normalized-snyk-backend.json ] && ARGS+=(--backend-snyk inputs/normalized-snyk-backend.json)
           [ -f inputs/normalized-sbom-backend.json ] && ARGS+=(--backend-sbom inputs/normalized-sbom-backend.json)

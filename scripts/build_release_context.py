@@ -582,6 +582,7 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--release-version", required=True)
     parser.add_argument("--repository", required=True)
+    parser.add_argument("--app-sec-provenance")
     parser.add_argument("--backend-findings")
     parser.add_argument("--backend-snyk")
     parser.add_argument("--backend-sbom")
@@ -692,6 +693,16 @@ def main():
         "frontend": compute_dependency_summary([f for f in grouped_findings if f.get("component") == "frontend"]),
     }
 
+    # Per-workflow real source commit, when release-readiness.yaml had to
+    # fall back to "latest successful run" instead of an exact SHA match
+    # (backend-ci.yaml/frontend-ci.yaml/app-security-scan-*.yaml only
+    # re-run on backend/**/frontend/** changes — a pure scripts/ or
+    # workflow-only commit, like most of this pipeline's own recent
+    # history, won't have a matching run). Surfaced as real data, not
+    # silently assumed current — same staleness-tracking philosophy as
+    # dast_scan_metadata/kyverno_scan_metadata/kubearmor_scan_metadata.
+    app_sec_provenance = load_json(args.app_sec_provenance, {})
+
     release_context = {
         "release": {
             "version": args.release_version,
@@ -699,6 +710,7 @@ def main():
             "components": ["backend", "frontend", "deployed-app"],
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
+        "app_sec_provenance": app_sec_provenance,
         "findings": grouped_findings,
         "remediation_guide": remediation_guide,
         "sbom_summary": sbom_summary,

@@ -204,18 +204,47 @@ def build_provenance(release_ctx, infra_ctx):
                 f"(via git rev-list)."
             )
 
-    return {
-        "repository": app_release.get("repository"),
-        "application_security": {
+    # Per-workflow real source commits, when available — added 2026-06-27
+    # alongside the latest-successful-run fallback in release-readiness.yaml
+    # (backend-ci.yaml/frontend-ci.yaml/app-security-scan-*.yaml only
+    # re-run on backend/**/frontend/** changes, so a pure scripts/ or
+    # workflow-only commit won't have a matching run — the same staleness
+    # reality infrastructure_security already accounts for). Falls back to
+    # the old file-level-only note for any release_context.json built
+    # before this field existed — backward compatible, not a hard
+    # requirement.
+    app_sec_provenance = release_ctx.get("app_sec_provenance") or {}
+    if app_sec_provenance:
+        any_fallback = any(not v.get("exact_match", True) for v in app_sec_provenance.values())
+        application_security_provenance = {
+            "per_workflow": app_sec_provenance,
+            "any_used_fallback_commit": any_fallback,
+            "note": (
+                "Per-workflow real source commit, since backend-ci.yaml/frontend-ci.yaml/"
+                "app-security-scan-*.yaml only re-run on backend/**/frontend/** changes — "
+                "exact_match: false means that workflow's latest successful run came from "
+                "a different commit than this release, surfaced here rather than silently "
+                "assumed current. Still file-level only within each workflow — no per-tool "
+                "(codeql vs sonarcloud vs gitguardian vs snyk) timestamps exist yet."
+            ),
+        }
+    else:
+        application_security_provenance = {
             "source_version": app_version,
             "source_generated_at": app_release.get("generated_at"),
             "note": (
                 "File-level only — per-tool timestamps for codeql/sonarcloud/"
                 "gitguardian/snyk aren't tracked yet (scan_status has success/"
                 "failure, not when each tool last ran). This reflects when "
-                "release_context.json itself was last built."
+                "release_context.json itself was last built. No app_sec_provenance "
+                "data available — this release_context.json predates that field, or "
+                "release-readiness.yaml's download step didn't produce it."
             ),
-        },
+        }
+
+    return {
+        "repository": app_release.get("repository"),
+        "application_security": application_security_provenance,
         "infrastructure_security": {
             "source_version": infra_version,
             "source_generated_at": infra_release.get("generated_at"),
