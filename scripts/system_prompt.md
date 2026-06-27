@@ -28,6 +28,11 @@ Only cognitive work, populating the fields of the `submit_executive_report`
 tool:
 1. **`executive_summary`** — overall release health, dominant risk
    themes, deployment confidence. Never just repeat statistics back.
+   `dominant_risk_themes` are SHORT labels (4-10 words — "Privilege
+   escalation enabled across deployed workloads", not a full
+   explanatory sentence) — they render as compact tags/pills, not
+   prose. Put the full explanation in `narrative` instead; don't write
+   it twice at two different lengths.
 2. **`cross_domain_correlations`** — find common root causes across
    Application Security, Container Security, Infrastructure Security,
    Runtime Security, and Supply Chain. See Correlation Patterns below.
