@@ -125,7 +125,7 @@ def build_initial_messages(release_context_json):
     return [{"role": "user", "content": user_message}]
 
 
-def call_claude(messages, tool_schema, system_prompt, model, max_tokens, api_key):
+def call_claude(messages, tool_schema, system_prompt, model, max_tokens, api_key, timeout):
     """One API call. Takes a full messages list, not just the initial
     user message — this is what makes the corrective retry in main()
     possible: a retry is just this same function called again with two
@@ -162,7 +162,7 @@ def call_claude(messages, tool_schema, system_prompt, model, max_tokens, api_key
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             body = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8", errors="replace")
@@ -170,6 +170,24 @@ def call_claude(messages, tool_schema, system_prompt, model, max_tokens, api_key
         sys.exit(1)
     except urllib.error.URLError as e:
         print(f"FATAL: could not reach the Anthropic API: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+    except TimeoutError:
+        # Confirmed via a real run: a read timeout on an already-
+        # established connection (the request was sent, the model was
+        # generating, but the response didn't complete within `timeout`
+        # seconds) raises a raw TimeoutError, NOT urllib.error.URLError —
+        # it was propagating as an unhandled traceback rather than a
+        # clean FATAL message. A 16384-max-tokens tool-use generation
+        # over 54 findings can genuinely take a while; this is a timeout
+        # value problem more than a code bug, but the crash-instead-of-
+        # clean-failure was a real gap regardless of the right value.
+        print(
+            f"FATAL: the request to the Anthropic API timed out after {timeout}s waiting for "
+            f"a response. The model may still have been generating — this is a read timeout, "
+            f"not a connection failure. Re-run with a higher --timeout if this persists, "
+            f"especially for large --max-tokens values.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Diagnostics printed HERE, unconditionally, for every attempt — not
@@ -277,6 +295,14 @@ def main():
              "genuinely need more room. Now that every attempt logs its actual token usage "
              "(see call_claude), it'll be obvious from the logs if this still isn't enough.",
     )
+    parser.add_argument(
+        "--timeout", type=int, default=600,
+        help="Raised from an earlier default of 180s after a real run hit a read timeout — "
+             "a near-max-tokens tool-use generation over 54 findings can genuinely take "
+             "longer than 3 minutes. This is a READ timeout (the request was sent, the model "
+             "was generating, the response just didn't complete in time), not a connection "
+             "failure — raising this is the correct fix, not a workaround for a bug.",
+    )
     args = parser.parse_args()
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -322,7 +348,7 @@ def main():
     for attempt in range(1, MAX_ATTEMPTS + 1):
         print(f"Calling the model (attempt {attempt}/{MAX_ATTEMPTS})...")
         ai_output, tool_use_id, raw_response = call_claude(
-            messages, tool_schema, system_prompt, args.model, args.max_tokens, api_key
+            messages, tool_schema, system_prompt, args.model, args.max_tokens, api_key, args.timeout
         )
         candidate_report = assemble_executive_report(ai_output, release_context)
 
