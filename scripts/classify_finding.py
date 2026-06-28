@@ -58,7 +58,16 @@ CATEGORY_RULES = [
     # (client-side allowlisting) differ from server-side SSRF.
     (r"construct the url.?s path from user-controlled|tainted data is validated before being used to construct a client-side request url", "client-side-request-forgery"),
 
-    (r"reflective-xss|reflect unsanitized user-controlled|cross-site scripting|\bxss\b|dom-based xss|stored xss|execution of arbitrary client-side code|dangerouslysetinnerhtml", "xss"),
+    # bad-tag-filter: confirmed via a real run against actual CodeQL output
+    # (py/bad-tag-filter, "does not match upper case <SCRIPT> tags") — a
+    # case-sensitivity bug in a hand-rolled tag-stripping regex, which is
+    # exactly an XSS sanitization gap, not a separate concern; the
+    # category's existing remediation text ("use the framework's
+    # built-in templating auto-escaping" instead of a fragile blocklist
+    # regex) already fits without modification. Matched on the rule_id
+    # substring specifically, not the message text — rule_id is the
+    # stable identifier; the message can vary slightly per finding.
+    (r"reflective-xss|reflect unsanitized user-controlled|cross-site scripting|\bxss\b|dom-based xss|stored xss|execution of arbitrary client-side code|dangerouslysetinnerhtml|bad-tag-filter", "xss"),
     (r"\bcsrf\b|cross-site request forgery", "csrf"),
     (r"xml external entit|\bxxe\b", "xxe"),
     (r"deserialization.*untrusted|unsafe deserialization|pickle\.loads|yaml\.load\b", "insecure-deserialization"),
@@ -280,6 +289,18 @@ TYPE_BY_CATEGORY = {
     "node-hardening-gap": "security",
     "node-pool-maintenance": "quality",
 
+    # Discovered via real validation against a second, different
+    # repository (alfonsof/terraform-google-cloud-examples) — these check
+    # IDs never appeared in CloudCart's own Terraform, so they weren't in
+    # this table until a real different repo actually surfaced them. Each
+    # is genuinely distinct from existing categories despite surface-level
+    # name similarity to one — see normalize_checkov.py's CHECK_ID_MAPPING
+    # comments for the specific "why not just reuse X" reasoning per check.
+    "project-wide-ssh-key-access": "security",
+    "missing-disk-encryption": "security",
+    "missing-shielded-vm": "security",
+    "public-compute-instance-risk": "security",
+
     # Kyverno. Several Kyverno checks reuse EXISTING categories above
     # (privileged-container, host-namespace-sharing, excessive-capabilities,
     # privilege-escalation, run-as-root, missing-resource-limits,
@@ -390,6 +411,10 @@ RECOMMENDATIONS_BY_CATEGORY = {
     "missing-storage-access-logging": "Configure a `logging` block on the bucket pointing to a separate log-sink bucket, so object access is auditable.",
     "missing-bucket-versioning": "Enable object versioning on the bucket so an accidental overwrite or delete can be recovered rather than being permanent.",
     "node-hardening-gap": "Enable Shielded VM Secure Boot (`shielded_instance_config.enable_secure_boot = true`) on the node pool to prevent loading unsigned/malicious boot components.",
+    "project-wide-ssh-key-access": "Set `metadata.block-project-ssh-keys = \"true\"` (or `metadata_startup_script`/the instance's own `metadata` block) on the instance so it only accepts its own instance-level SSH keys, not any key valid project-wide — limits blast radius if one key elsewhere in the project is ever compromised.",
+    "missing-disk-encryption": "Add a `disk_encryption_key` block with a Customer-Supplied Encryption Key (or use CMEK via `kms_key_self_link`) on the instance's boot/attached disks — Google encrypts disks by default, but this gives the project, not Google, ownership of the key.",
+    "missing-shielded-vm": "Add a `shielded_instance_config` block (`enable_secure_boot = true`, `enable_vtpm = true`, `enable_integrity_monitoring = true`) to the `google_compute_instance` resource — distinct from the GKE node-pool version of this same feature (see node-hardening-gap), this is the standalone-VM attribute path.",
+    "public-compute-instance-risk": "Remove the instance's `network_interface.access_config` block (which assigns an ephemeral/static public IP) unless the instance genuinely needs to be internet-facing; route external access through a load balancer or bastion instead.",
     "node-pool-maintenance": "Enable `management.auto_repair` and `management.auto_upgrade` on the node pool so unhealthy or outdated nodes are remediated automatically instead of silently drifting.",
 
     "host-path-mount": "Remove the hostPath volume, or replace it with a narrower-scoped alternative (ConfigMap, Secret, emptyDir, or a dedicated PVC) — hostPath gives a container direct access to the node's filesystem, which is a well-known container-escape vector.",
