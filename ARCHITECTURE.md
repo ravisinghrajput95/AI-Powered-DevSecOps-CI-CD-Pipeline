@@ -122,7 +122,7 @@ flowchart LR
 | `infrastructure_security` | Validated across many real CI runs (Checkov, kube-linter, kubeconform) |
 | `runtime_security` | Validated across many real CI runs (Kyverno, KubeArmor, ZAP against the live cluster) |
 | `application_security` | Validated with real data: 119 real findings (CodeQL, SonarCloud, GitGuardian, Snyk SCA) in one real run, zero invalid citations, cross-domain correlation integrity confirmed correct |
-| `container_security` | Not yet populated by real data — Snyk *container* scanning isn't wired into `backend-ci.yaml`/`frontend-ci.yaml` yet |
+| `container_security` | Real findings confirmed flowing through (8 real CVEs from real Snyk container scans — `expat`, `gnutls28`, `krb5` — in one real run). Note this is a narrower claim than `application_security`'s: it confirms the deterministic data path works, not that the AI's reasoning over this domain specifically, or citation/rendering correctness for it, has been separately verified yet. |
 
 ## Schema reference
 
