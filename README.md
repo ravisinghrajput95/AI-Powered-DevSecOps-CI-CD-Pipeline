@@ -363,7 +363,7 @@ flowchart TD
 | `infrastructure_security` | Validated across many real CI runs |
 | `runtime_security` | Validated across many real CI runs |
 | `application_security` | **Validated with real data** — 119 real findings from CodeQL/SonarCloud/GitGuardian/Snyk SCA in one real run, zero invalid citations, correct cross-domain correlation integrity |
-| `container_security` | **Not yet populated by real data** — Snyk *container* scanning (distinct from Snyk SCA above) isn't wired into `backend-ci.yaml`/`frontend-ci.yaml` yet |
+| `container_security` | **Real findings confirmed flowing through** (8 real CVEs in one real run) — narrower than `application_security`'s validation: confirms the data path, not yet AI-reasoning/citation correctness for this domain specifically |
 
 ### Test suite
 
