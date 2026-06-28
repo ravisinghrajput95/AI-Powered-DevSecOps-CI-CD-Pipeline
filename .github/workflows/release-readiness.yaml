@@ -122,6 +122,8 @@ jobs:
           download_or_warn "frontend-ci.yaml" "normalized-sbom-frontend"
           download_or_warn "app-security-scan-backend.yaml" "scan-status-backend"
           download_or_warn "app-security-scan-frontend.yaml" "scan-status-frontend"
+          download_or_warn "backend-ci.yaml" "scan-status-backend-docker"
+          download_or_warn "frontend-ci.yaml" "scan-status-frontend-docker"
 
           # These two artifact names include the producing run's own ID
           # (e.g. "security-findings-backend-1234567"), so the exact name
@@ -191,6 +193,17 @@ jobs:
                   echo "::warning::Run $RUNTIME_RUN_ID succeeded but artifact '$artifact' was not found."
                 fi
               done
+
+              # Closes a real, known gap: scan_status.deployed-app.* used to
+              # be unconditionally hardcoded to "not_configured" — the
+              # findings above were never missing, only the status of each
+              # scan that produced them. record-scan-status (added to
+              # runtime-security-scan.yaml) now writes this for real.
+              if gh run download "$RUNTIME_RUN_ID" -n "scan-status-deployed-app" -D inputs/ 2>/dev/null; then
+                echo "Downloaded 'scan-status-deployed-app' from run $RUNTIME_RUN_ID"
+              else
+                echo "::warning::Run $RUNTIME_RUN_ID succeeded but artifact 'scan-status-deployed-app' was not found — it may predate this fix."
+              fi
             fi
           fi
 
@@ -274,9 +287,16 @@ jobs:
 
       # ── Merge per-component scan_status files into the combined shape
       # build_release_context.py expects: {"backend": {...}, "frontend": {...}}.
-      # snyk/syft aren't tracked upstream yet (backend-ci.yaml/frontend-ci.yaml
-      # don't record their own outcomes into a status file), so those two
-      # default to "unknown" here rather than being guessed.
+      # "snyk" (container scan, distinct from snyk_sca) used to be
+      # unconditionally hardcoded to "not_configured" here — not because the
+      # scan was missing (it's been running in backend-ci.yaml/frontend-ci.yaml
+      # and producing real findings the whole time, see normalized-snyk-*
+      # above), only because neither workflow recorded its own outcome.
+      # Fixed at the source (backend-ci.yaml/frontend-ci.yaml now write
+      # scan_status_*_docker.json) — this just reads it now, the same
+      # honest-fallback way scan_status_backend.json's absence is already
+      # handled below. "syft" remains genuinely not instrumented — no
+      # workflow records its outcome yet, this PR didn't touch that.
       - name: Merge scan status
         run: |
           python3 - << 'EOF'
@@ -284,34 +304,57 @@ jobs:
           import os
 
           # codeql/sonarcloud/gitguardian/snyk_sca are what
-          # app-security-scan-*.yaml actually tracks. "snyk" here means the
-          # CONTAINER scan's status specifically (a different key from
-          # snyk_sca) — still not instrumented, since that status comes from
-          # backend-ci.yaml/frontend-ci.yaml, which doesn't write a
-          # scan-status file yet. Same for syft. Two different kinds of "we
-          # don't know": one because this release's scan never ran, one
-          # because nothing has ever recorded this tool's status regardless
-          # of release.
+          # app-security-scan-*.yaml actually tracks.
           TRACKED_BY_SECURITY_SCAN = ("codeql", "sonarcloud", "gitguardian", "snyk_sca")
-          NOT_INSTRUMENTED = ("snyk", "syft")
+          # "syft" (SBOM generation) still isn't instrumented by any
+          # workflow — genuinely not_configured, not a fallback default
+          # standing in for missing data.
+          STILL_NOT_INSTRUMENTED = ("syft",)
 
-          def build_component_status(status_path):
+          def build_component_status(status_path, docker_status_path):
               if not os.path.exists(status_path):
                   result = {t: "skipped" for t in TRACKED_BY_SECURITY_SCAN}
-                  result.update({t: "not_configured" for t in NOT_INSTRUMENTED})
-                  return result
-              with open(status_path) as f:
-                  raw = json.load(f)
-              result = {t: raw.get(t, "skipped") for t in TRACKED_BY_SECURITY_SCAN}
-              result.update({t: "not_configured" for t in NOT_INSTRUMENTED})
+              else:
+                  with open(status_path) as f:
+                      raw = json.load(f)
+                  result = {t: raw.get(t, "skipped") for t in TRACKED_BY_SECURITY_SCAN}
+
+              # "snyk" (container) — read the real outcome if backend-ci.yaml/
+              # frontend-ci.yaml's run was found and downloaded; honestly
+              # "not_configured" only if that artifact genuinely wasn't
+              # available (e.g. an old run predating this fix), never guessed.
+              if os.path.exists(docker_status_path):
+                  with open(docker_status_path) as f:
+                      docker_raw = json.load(f)
+                  result["snyk"] = docker_raw.get("snyk", "not_configured")
+              else:
+                  result["snyk"] = "not_configured"
+
+              result.update({t: "not_configured" for t in STILL_NOT_INSTRUMENTED})
               return result
 
-          backend = build_component_status("inputs/scan_status_backend.json")
-          frontend = build_component_status("inputs/scan_status_frontend.json")
+          backend = build_component_status("inputs/scan_status_backend.json", "inputs/scan_status_backend_docker.json")
+          frontend = build_component_status("inputs/scan_status_frontend.json", "inputs/scan_status_frontend_docker.json")
+
+          combined = {"backend": backend, "frontend": frontend}
+
+          # deployed-app (zap/kyverno/kubearmor) — same fix as snyk above,
+          # same honest-fallback shape: real status if record-scan-status's
+          # artifact was found, "not_configured" only if it genuinely
+          # wasn't (e.g. a run predating this fix). build_release_context.py's
+          # scan_status.setdefault("deployed-app", ...) only fires when this
+          # key is absent, so writing it here for real is the entire fix —
+          # no change needed on the Python side.
+          deployed_app_path = "inputs/scan_status_deployed_app.json"
+          if os.path.exists(deployed_app_path):
+              with open(deployed_app_path) as f:
+                  combined["deployed-app"] = json.load(f)
+          else:
+              combined["deployed-app"] = {"zap": "not_configured", "kyverno": "not_configured", "kubearmor": "not_configured"}
 
           with open("inputs/scan_status.json", "w") as f:
-              json.dump({"backend": backend, "frontend": frontend}, f, indent=2)
-          print(json.dumps({"backend": backend, "frontend": frontend}, indent=2))
+              json.dump(combined, f, indent=2)
+          print(json.dumps(combined, indent=2))
           EOF
 
       # ── Phase 1: deterministic ReleaseContext build (always runs, free) ──

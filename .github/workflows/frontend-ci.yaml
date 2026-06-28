@@ -157,6 +157,7 @@ jobs:
         uses: snyk/actions/setup@master
 
       - name: Scan image with Snyk
+        id: snyk_scan
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
@@ -169,9 +170,9 @@ jobs:
           exit_code=$?
           set -e
           case $exit_code in
-            0) echo "Snyk scan: no vulnerabilities at or above the threshold." ;;
-            1) echo "Snyk scan: vulnerabilities found (report-only, not blocking push)." ;;
-            *) echo "::warning::Snyk scan did not complete cleanly (exit code $exit_code) — check the log above. The report may be missing or incomplete." ;;
+            0) echo "Snyk scan: no vulnerabilities at or above the threshold."; echo "completed=true" >> "$GITHUB_OUTPUT" ;;
+            1) echo "Snyk scan: vulnerabilities found (report-only, not blocking push)."; echo "completed=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::warning::Snyk scan did not complete cleanly (exit code $exit_code) — check the log above. The report may be missing or incomplete."; echo "completed=false" >> "$GITHUB_OUTPUT" ;;
           esac
           exit 0
 
@@ -194,6 +195,22 @@ jobs:
           name: normalized-snyk-frontend
           path: normalized-snyk-frontend.json
           if-no-files-found: ignore
+
+      # See backend-ci.yaml's identical step for why this exists.
+      - name: Record scan status
+        if: always()
+        run: |
+          cat > scan_status_frontend_docker.json << EOF
+          {"snyk": "${{ steps.snyk_scan.outputs.completed == 'true' && 'success' || 'failed' }}"}
+          EOF
+          cat scan_status_frontend_docker.json
+
+      - name: Upload scan status
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scan-status-frontend-docker
+          path: scan_status_frontend_docker.json
 
       # Scans the same local (pre-push) image — no registry auth needed, since
       # the Docker daemon already has it loaded from the build step above.

@@ -1,6 +1,6 @@
-# CloudCart - Cloud-Native E-Commerce (DevSecOps Training)
+# CloudCart - Cloud-Native E-Commerce
 
-> **WARNING:** This application is **intentionally insecure**. It exists solely for AI-augmented DevSecOps platform training, security tool evaluation, and pipeline demonstration. **Never deploy to production or expose to the public internet.**
+> **WARNING:** This application is **intentionally insecure**. It exists solely for AI-augmented DevSecOps platform POC, security tool evaluation, and pipeline demonstration. **Never deploy to production or expose to the public internet.**
 
 CloudCart is a fully functional cloud-native e-commerce application with realistic vulnerabilities and misconfigurations designed to generate rich findings across the DevSecOps toolchain.
 
@@ -29,8 +29,9 @@ CloudCart is a fully functional cloud-native e-commerce application with realist
 | Orchestration | Kubernetes, Helm |
 | Infrastructure | Terraform (GKE) |
 | Observability | Prometheus, Grafana |
-| CI/CD | GitHub Actions, ArgoCD |
-| Security | Kyverno, KubeArmor, Cosign, Checkov, Snyk, Gitleaks, SonarQube, CodeQL |
+| CI/CD | GitHub Actions |
+| Security | Kyverno, KubeArmor, Cosign, Checkov, Snyk, GitGuardian, Kubelinter, Kubeconform, Syft, SonarCloud, CodeQL, Dependabot, GHAS, SBOM, ZAP |
+| **AI Release Intelligence** | **Claude (forced tool-use) — see [AI Release Intelligence Platform](#ai-release-intelligence-platform) below** |
 
 ## Business Features
 
@@ -100,18 +101,18 @@ CloudCart is a fully functional cloud-native e-commerce application with realist
 | Tool | What It Finds |
 |------|---------------|
 | GitHub Advanced Security (CodeQL) | SQLi, command injection, SSRF patterns |
-| Gitleaks | Hardcoded secrets in code, configs, workflows |
-| SonarQube | Code smells, security hotspots, duplication |
+| GitGuardian | Hardcoded secrets in code, configs, workflows |
+| SonarCloud | Code smells, security hotspots, duplication |
 | Snyk Open Source | Vulnerable Python/npm dependencies |
 | Snyk Container | CVEs in Docker base images |
 | Syft / CycloneDX | SBOM generation |
 | Checkov | Terraform, Kubernetes, Helm misconfigs |
 | Kyverno | Privileged pods, missing limits, hostPath |
 | KubeArmor | Runtime process/file violations |
-| ArgoCD | GitOps drift, deployment sync |
 | Cosign | Image signing and verification |
+| ZAP | DAST | 
 | Prometheus / Grafana | Application metrics dashboards |
-| Slack / Jira | Pipeline notifications and ticket creation |
+| **AI Release Intelligence Agent** | **Cross-domain correlation, prioritized risk reasoning, release readiness recommendation — see below** |
 
 ## Project Structure
 
@@ -122,57 +123,22 @@ Cloudcart/
 |   `-- src/
 |-- backend/                  # Flask REST API
 |-- database/                 # PostgreSQL init SQL
-|-- k8s/                      # Kubernetes manifests (Kustomize)
-|-- helm/cloudcart/           # Helm chart
+|-- helm/
+|   |-- cloudcart/            # Application Helm chart
+|   |-- postgresql/           # Database Helm chart
+|   `-- monitoring/           # Prometheus/Grafana Helm chart
 |-- terraform/                # GKE infrastructure
 |-- monitoring/               # Prometheus and Grafana configs
-|-- security/
-|   |-- kyverno/              # Kyverno cluster policies
+|-- policies/
+|   |-- kyverno/              # Kyverno cluster policies (pod-security, supply-chain)
 |   `-- kubearmor/            # KubeArmor runtime policies
-|-- argocd/                   # ArgoCD Application manifest
-|-- .github/workflows/        # CI/CD pipelines
-|-- secrets/                  # Sample credentials (Gitleaks targets)
-|-- scripts/                  # Utility scripts
+|-- .github/workflows/        # CI/CD + AI Release Intelligence pipelines
+|-- scripts/                  # Normalizers, ReleaseContext builders, AI agent, renderers
+|-- tests/                    # 507 automated tests + golden regression dataset
 |-- docker-compose.yml
-|-- Makefile
-`-- README.md
+|-- README.md
 ```
-
 ## Quick Start (Docker Compose)
-
-### Prerequisites
-
-- Docker and Docker Compose
-- 4 GB RAM minimum
-
-### Run
-
-```bash
-# Clone and start
-git clone <repo-url> cloudcart
-cd cloudcart
-make build
-make up
-
-# Seed products if DB init did not run
-make seed
-```
-
-### Access
-
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Frontend | http://localhost:3000 | n/a |
-| API | http://localhost:5000 | n/a |
-| Prometheus | http://localhost:9090 | n/a |
-| Grafana | http://localhost:3001 | admin / admin |
-
-### Demo Login
-
-- **Admin:** `admin` / `admin123`
-- Or register a new account at `/register`
-
-## Local Development (without full Docker)
 
 ### Prerequisites
 
@@ -244,24 +210,16 @@ The seed data and product API return image paths such as `/images/products/headp
 - `kubectl` configured
 - Container images built and available to the target cluster
 
-### Deploy with kubectl
+### Build images
 
 ```bash
-# Build images
 docker build -t cloudcart-backend:latest ./backend
 docker build -t cloudcart-frontend:latest ./frontend
+```
 
-# Load into kind/minikube if local
+### Load into kind/minikube if local
 kind load docker-image cloudcart-backend:latest
 kind load docker-image cloudcart-frontend:latest
-
-# Deploy
-kubectl apply -k k8s/
-
-# Verify
-kubectl get pods -n cloudcart
-kubectl get svc -n cloudcart
-```
 
 ### Deploy with Helm
 
@@ -276,10 +234,10 @@ helm upgrade --install cloudcart ./helm/cloudcart \
 
 ```bash
 # Kyverno policies (audit mode)
-kubectl apply -f security/kyverno/
+kubectl apply -f policies/kyverno/
 
 # KubeArmor policies
-kubectl apply -f security/kubearmor/
+kubectl apply -f policies/kubearmor/
 ```
 
 ## GKE Deployment (Terraform)
@@ -324,28 +282,99 @@ helm upgrade --install cloudcart ../helm/cloudcart \
 
 ## CI/CD Pipeline
 
-The GitHub Actions workflow (`.github/workflows/ci-cd.yml`) runs:
+The pipeline is split across several focused workflows, not one monolithic file — each scanner's workflow records its own real success/failure status, which the AI Release Intelligence pipeline (below) reads rather than assumes.
 
-1. **Gitleaks** - secret scanning
-2. **SonarQube** - static analysis
-3. **CodeQL** - semantic security analysis
-4. **Snyk** - dependency and container scanning
-5. **Syft** - SBOM generation (CycloneDX)
-6. **Checkov** - IaC policy scanning
-7. **Cosign** - container image signing
-8. **Helm deploy** - staging deployment
-9. **Kyverno** - policy validation
-10. **Slack / Jira** - notifications
+| Workflow | Triggers on | Produces |
+|---|---|---|
+| `backend-ci.yaml` / `frontend-ci.yaml` | `backend/**` / `frontend/**`, plus Helm chart changes | Build, unit tests |
+| `app-security-scan-backend.yaml` / `-frontend.yaml` | `backend/**` / `frontend/**` | CodeQL, SonarCloud, GitGuardian, Snyk SCA findings + `scan_status_*.json` |
+| `infra-security-scan.yaml` | `helm/**`, `terraform/**` | Checkov, kube-linter, kubeconform findings |
+| `infra-readiness.yml` | manual / scheduled | Merges infra findings into `infra_context.json`, with latest-successful-run fallback if no exact commit match exists |
+| `runtime-security-scan.yaml` | deploy / manual | Kyverno, KubeArmor, ZAP findings against the live cluster |
+| `release-readiness.yaml` | manual / release | Pulls the above into `final_release_context.json`, runs the AI Release Intelligence Agent, renders the report |
 
 ### Required Secrets
 
 | Secret | Purpose |
 |--------|---------|
 | `SNYK_TOKEN` | Snyk vulnerability scanning |
-| `SONAR_TOKEN` | SonarQube analysis |
-| `SLACK_WEBHOOK_URL` | Pipeline notifications |
-| `JIRA_URL` | Jira ticket creation |
-| `JIRA_AUTH` | Jira API authentication |
+| `SONAR_TOKEN` | SonarCloud analysis |
+| `GITGUARDIAN_API_KEY` | GitGuardian secret scanning |
+| `ANTHROPIC_API_KEY` | AI Release Intelligence Agent |
+
+Scans are designed to produce findings even when secrets are not set; several workflow steps use `continue-on-error` where appropriate.
+
+## AI Release Intelligence Platform
+
+Every scanner above produces its own raw, tool-specific output. This platform turns that into one structured, evidence-grounded release decision — not a dashboard aggregating numbers, an actual reasoned recommendation with citations back to real findings.
+
+**Full design, schema reference, domain model, and workflow orchestration diagram: [ARCHITECTURE.md](ARCHITECTURE.md)**
+
+Three strictly separated layers — security tools own facts, Python owns deterministic computation, AI owns reasoning only, humans own the actual deployment decision:
+
+```mermaid
+flowchart TD
+    subgraph Tools["Raw security tool output"]
+        T1[Checkov]
+        T2["kube-linter / kubeconform"]
+        T3[CodeQL]
+        T4[SonarCloud]
+        T5[GitGuardian]
+        T6[Snyk SCA]
+        T7[Kyverno]
+        T8[KubeArmor]
+        T9[ZAP]
+    end
+
+    subgraph Normalize["scripts/normalize_*.py"]
+        N["One canonical Finding shape<br/>(severity, category, type, confidence, finding_id)"]
+    end
+    T1 --> N
+    T2 --> N
+    T3 --> N
+    T4 --> N
+    T5 --> N
+    T6 --> N
+    T7 --> N
+    T8 --> N
+    T9 --> N
+
+    N --> B1["build_release_context.py<br/>app + runtime findings"]
+    N --> B2["build_infra_context.py<br/>infra + terraform findings"]
+
+    B1 --> C["compose_release_context.py<br/>merge · assign_domain · compute statistics"]
+    B2 --> C
+
+    C --> RC[("final_release_context.json<br/>ReleaseContext v1.0 — frozen")]
+
+    RC --> AI["AI Release Intelligence Agent<br/>run_security_analysis.py<br/>Claude, forced tool-use, schema-validated"]
+    AI --> ER[("executive_report.json<br/>ExecutiveReport v1.0 — frozen")]
+
+    ER --> R1["render_report.py → Markdown"]
+    ER --> R2["render_html_report.py → HTML"]
+    RC -. resolves finding_id citations .-> R1
+    RC -. resolves finding_id citations .-> R2
+```
+
+### What's actually validated, with real data — not assumed
+
+| Domain | Status |
+|---|---|
+| `infrastructure_security` | Validated across many real CI runs |
+| `runtime_security` | Validated across many real CI runs |
+| `application_security` | **Validated with real data** — 119 real findings from CodeQL/SonarCloud/GitGuardian/Snyk SCA in one real run, zero invalid citations, correct cross-domain correlation integrity |
+| `container_security` | **Not yet populated by real data** — Snyk *container* scanning (distinct from Snyk SCA above) isn't wired into `backend-ci.yaml`/`frontend-ci.yaml` yet |
+
+### Test suite
+
+507 automated tests (`tests/`) — schema validation, evidence-citation integrity, cross-domain correlation integrity, renderer correctness, and a golden regression dataset covering 8 representative scenarios. Full detail in [ARCHITECTURE.md](ARCHITECTURE.md#test-suite).
+
+```bash
+pip install -r tests/requirements.txt
+python3 -m pytest
+```
+
+Known gaps and the full domain-assignment/schema reference: see [ARCHITECTURE.md](ARCHITECTURE.md#known-gaps).
 
 ## API Endpoints
 
@@ -366,15 +395,7 @@ The GitHub Actions workflow (`.github/workflows/ci-cd.yml`) runs:
 
 ## AI Platform Integration
 
-This codebase generates findings suitable for:
-
-- **AI Vulnerability Analyzer** - maps CodeQL/Snyk/Sonar findings to CWE/OWASP
-- **AI Vulnerability Remediation Expert** - suggests fixes for each vulnerability class
-- **AI PR Reviewer** - reviews pull requests against security policies
-- **AI Kubernetes Manifest Reviewer** - analyzes K8s/Helm misconfigurations
-- **AI Terraform Reviewer** - evaluates IaC security posture
-- **AI Kyverno Findings Analyzer** - interprets policy violation reports
-- **AI KubeArmor Incident Analyzer** - correlates runtime security events
+This codebase generates findings consumed by the **AI Release Intelligence Platform** (see [above](#ai-release-intelligence-platform)) — a single AI agent that reasons across CodeQL/Snyk/SonarCloud/GitGuardian (application), Checkov/kube-linter (infrastructure), and Kyverno/KubeArmor/ZAP (runtime) findings together, correlates them across domains, and produces a cited, schema-validated release readiness recommendation. This replaces what an earlier draft of this README described as a list of separate, hypothetical future tools (a vulnerability analyzer, a remediation expert, a PR reviewer, etc.) — those ideas converged into the one real, validated system documented above, not into the multiple speculative tools previously listed here.
 
 ## Security Testing Examples
 
