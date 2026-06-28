@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "8d6cdbfa302f83bc",
+  "generated_at": "2026-01-01T00:00:00+00:00",
+  "release_context_ref": {
+    "repository": "example-org/example-service",
+    "version": "ffff6666ffff6666ffff6666ffff6666ffff6666",
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "executive_summary": {
+    "overall_health": "CRITICAL",
+    "deployment_confidence": "LOW",
+    "dominant_risk_themes": [
+      "Live secret in commit history",
+      "Critical SQL injection",
+      "Vulnerable Flask dependency"
+    ],
+    "narrative": "This release surfaces a confirmed live secret, a SQL injection vulnerability, and multiple critical/high dependency CVEs across both backend and frontend \u2014 the application-security domain this pipeline rarely gets to assess given how often these scans are skipped."
+  },
+  "cross_domain_correlations": [],
+  "top_risks": [
+    {
+      "risk_id": "risk-1",
+      "title": "Live secret confirmed in commit history",
+      "impact": "GitGuardian confirmed this credential is currently valid, not just pattern-matched.",
+      "why_it_matters": "An active credential in git history is immediately exploitable by anyone with repo access.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "d16c1bbff022"
+      ],
+      "recommended_action": "Revoke the credential immediately and purge it from git history."
+    },
+    {
+      "risk_id": "risk-2",
+      "title": "SQL injection in order routes",
+      "impact": "Unsanitized user input reaches a SQL query.",
+      "why_it_matters": "Direct path to data exfiltration or corruption.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "25ed174a1d1c"
+      ],
+      "recommended_action": "Use parameterized queries."
+    }
+  ],
+  "priority_actions": [
+    {
+      "action_id": "action-1",
+      "title": "Revoke and rotate the exposed credential",
+      "rationale": "Highest-impact, lowest-effort fix \u2014 a single rotation closes the most urgent exposure.",
+      "expected_risk_reduction": "Eliminates the live-secret risk entirely.",
+      "dependencies": [],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "d16c1bbff022"
+      ]
+    },
+    {
+      "action_id": "action-2",
+      "title": "Upgrade Flask past both known CVEs",
+      "rationale": "Two separate CVEs share the same pinned Flask version \u2014 one upgrade resolves both.",
+      "expected_risk_reduction": "Removes both flagged Flask CVEs in one change.",
+      "dependencies": [],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "a21dde1a0c94",
+        "a50a5daf8fa4"
+      ]
+    }
+  ],
+  "release_readiness": {
+    "recommendation": "DO_NOT_APPROVE",
+    "confidence": "HIGH",
+    "rationale": "A confirmed live secret plus an unmitigated SQL injection are each independently sufficient to block this release.",
+    "blocking_evidence": [
+      "d16c1bbff022",
+      "25ed174a1d1c"
+    ],
+    "conditions": null
+  },
+  "assumptions_and_unknowns": []
+}

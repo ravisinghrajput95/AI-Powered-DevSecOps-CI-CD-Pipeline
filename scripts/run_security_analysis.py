@@ -66,14 +66,17 @@ from datetime import datetime, timezone
 
 try:
     import jsonschema
-except ImportError:
-    print(
-        "FATAL: the 'jsonschema' package is required (pip install jsonschema). "
+except ImportError as e:
+    # raise, not print+sys.exit() — see renderer_common.py's identical
+    # fix for why: this module gets imported by build_golden_executive_reports.py
+    # (and potentially future tests), not only run standalone. SystemExit
+    # during import crashes an importer's collection/load process instead
+    # of surfacing as a normal, catchable error.
+    raise ImportError(
+        "the 'jsonschema' package is required (pip install jsonschema). "
         "Hand-rolling JSON Schema validation would reinvent a well-solved problem "
-        "poorly — this is a deliberate dependency, not an oversight.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+        "poorly — this is a deliberate dependency, not an oversight."
+    ) from e
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from executive_report_schema import SCHEMA

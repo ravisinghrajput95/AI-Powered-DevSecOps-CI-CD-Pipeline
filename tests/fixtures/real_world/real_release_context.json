@@ -1,0 +1,1311 @@
+{
+  "schema_version": "1.0.0",
+  "release": {
+    "version": "93d9a5a47017c888fb9a5e358b6b4ec47e872dca",
+    "repository": "ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline",
+    "components": [
+      "backend",
+      "frontend",
+      "deployed-app",
+      "infrastructure",
+      "terraform"
+    ],
+    "generated_at": "2026-06-27T19:12:42.550881+00:00"
+  },
+  "provenance": {
+    "repository": "ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline",
+    "application_security": {
+      "per_workflow": {
+        "backend-ci.yaml": {
+          "source_version": "921c68c411d00855b5176d3e84ee80a085463026",
+          "exact_match": false
+        },
+        "frontend-ci.yaml": {
+          "source_version": "921c68c411d00855b5176d3e84ee80a085463026",
+          "exact_match": false
+        },
+        "app-security-scan-backend.yaml": {
+          "source_version": "921c68c411d00855b5176d3e84ee80a085463026",
+          "exact_match": false
+        },
+        "app-security-scan-frontend.yaml": {
+          "source_version": "921c68c411d00855b5176d3e84ee80a085463026",
+          "exact_match": false
+        }
+      },
+      "any_used_fallback_commit": true,
+      "note": "Per-workflow real source commit, since backend-ci.yaml/frontend-ci.yaml/app-security-scan-*.yaml only re-run on backend/**/frontend/** changes \u2014 exact_match: false means that workflow's latest successful run came from a different commit than this release, surfaced here rather than silently assumed current. Still file-level only within each workflow \u2014 no per-tool (codeql vs sonarcloud vs gitguardian vs snyk) timestamps exist yet."
+    },
+    "infrastructure_security": {
+      "source_version": "921c68c411d00855b5176d3e84ee80a085463026",
+      "source_generated_at": "2026-06-27T07:34:21.609934+00:00",
+      "version_matches_application_security": false,
+      "commits_behind": null,
+      "commits_behind_note": "git history lookup unavailable or SHAs not reachable from this checkout.",
+      "note": "File-level only \u2014 per-tool timestamps for kube-linter/checkov/terraform-validate aren't tracked yet. infra-security-scan.yaml only triggers on helm/**, terraform/** changes, so this version differing from application_security's is the EXPECTED normal case, not an error \u2014 see this script's MERGE VALIDATION note."
+    },
+    "runtime_security": {
+      "zap": {
+        "run_id": "28282620983",
+        "scanned_at": "2026-06-27T07:32:12Z",
+        "days_stale": 0
+      },
+      "kyverno": {
+        "run_id": "28282620983",
+        "scanned_at": "2026-06-27T07:32:12Z",
+        "days_stale": 0
+      },
+      "kubearmor": {
+        "run_id": "28282620983",
+        "scanned_at": "2026-06-27T07:32:12Z",
+        "days_stale": 0
+      }
+    }
+  },
+  "findings": [
+    {
+      "finding_id": "0487801b1fb6",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_117",
+      "severity": "critical",
+      "category": "excessive-iam-privilege",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:142-147"
+      ],
+      "sample_message": "Ensure basic roles are not used at project level. (google_project_iam_member.compute_owner)",
+      "original_severity": "critical",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "54c214b711d1",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_49",
+      "severity": "critical",
+      "category": "excessive-iam-privilege",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:142-147"
+      ],
+      "sample_message": "Ensure roles do not impersonate or manage Service Accounts used at project level (google_project_iam_member.compute_owner)",
+      "original_severity": "critical",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "57df84a4027d",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_3",
+      "severity": "critical",
+      "category": "open-firewall-rule",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:10-29"
+      ],
+      "sample_message": "Ensure Google compute firewall ingress does not allow unrestricted rdp access (google_compute_firewall.allow_all)",
+      "original_severity": "critical",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "dbbdc1cf61c2",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_2",
+      "severity": "critical",
+      "category": "open-firewall-rule",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 2,
+      "locations": [
+        "/terraform/main.tf:10-29",
+        "/terraform/main.tf:31-42"
+      ],
+      "sample_message": "Ensure Google compute firewall ingress does not allow unrestricted ssh access (google_compute_firewall.allow_all)",
+      "original_severity": "critical",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "3ba928b4fd97",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_88",
+      "severity": "critical",
+      "category": "open-firewall-rule",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:10-29"
+      ],
+      "sample_message": "Ensure Google compute firewall ingress does not allow unrestricted mysql access (google_compute_firewall.allow_all)",
+      "original_severity": "critical",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "189191849e41",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_114",
+      "severity": "critical",
+      "category": "public-storage-bucket-risk",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:154-161"
+      ],
+      "sample_message": "Ensure public access prevention is enforced on Cloud Storage bucket (google_storage_bucket.assets)",
+      "original_severity": "critical",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "f35ff7111aaa",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_7",
+      "severity": "high",
+      "category": "legacy-cluster-auth",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:44-96"
+      ],
+      "sample_message": "Ensure Legacy Authorization is set to Disabled on Kubernetes Engine Clusters (google_container_cluster.primary)",
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "d4cac2b72249",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_13",
+      "severity": "high",
+      "category": "legacy-cluster-auth",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:44-96"
+      ],
+      "sample_message": "Ensure client certificate authentication to Kubernetes Engine Clusters is disabled (google_container_cluster.primary)",
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "5ecd8d3a4ddb",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_1",
+      "severity": "high",
+      "category": "missing-cluster-logging-monitoring",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:44-96"
+      ],
+      "sample_message": "Ensure Stackdriver Logging is set to Enabled on Kubernetes Engine Clusters (google_container_cluster.primary)",
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "d8a03f87214b",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_8",
+      "severity": "high",
+      "category": "missing-cluster-logging-monitoring",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:44-96"
+      ],
+      "sample_message": "Ensure Stackdriver Monitoring is set to Enabled on Kubernetes Engine Clusters (google_container_cluster.primary)",
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "382c6fe86e55",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_77",
+      "severity": "high",
+      "category": "open-firewall-rule",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:10-29"
+      ],
+      "sample_message": "Ensure Google compute firewall ingress does not allow on ftp port (google_compute_firewall.allow_all)",
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "e5f32d7b4723",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_75",
+      "severity": "high",
+      "category": "open-firewall-rule",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:10-29"
+      ],
+      "sample_message": "Ensure Google compute firewall ingress does not allow unrestricted FTP access (google_compute_firewall.allow_all)",
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "724685b547f7",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_29",
+      "severity": "high",
+      "category": "public-storage-bucket-risk",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:154-161"
+      ],
+      "sample_message": "Ensure that Cloud Storage buckets have uniform bucket-level access enabled (google_storage_bucket.assets)",
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "a37e4f16b0ef",
+      "component": "infrastructure",
+      "tool": "kube-linter",
+      "rule_id": "run-as-non-root",
+      "severity": "high",
+      "category": "run-as-root",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 7,
+      "locations": [
+        "cloudcart/Deployment/cloudcart-backend",
+        "cloudcart/Deployment/cloudcart-frontend",
+        "cloudcart/Job/cloudcart-db-init",
+        "cloudcart/StatefulSet/postgres",
+        "cloudcart/Job/postgres-seed-1"
+      ],
+      "sample_message": "container \"wait-for-postgres\" is not set to runAsNonRoot",
+      "remediation_notes": [
+        "Set runAsUser to a non-zero number and runAsNonRoot to true in your pod or container securityContext. Refer to https://kubernetes.io/docs/tasks/configure-pod-container/security-context/ for details."
+      ],
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "f1f751c2ee51",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_69",
+      "severity": "high",
+      "category": "workload-identity-disabled",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 2,
+      "locations": [
+        "/terraform/main.tf:44-96",
+        "/terraform/main.tf:98-127"
+      ],
+      "sample_message": "Ensure the GKE Metadata Server is Enabled (google_container_cluster.primary)",
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "6cb8ab1f3f5f",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_66",
+      "severity": "medium",
+      "category": "missing-binary-authorization",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:44-96"
+      ],
+      "sample_message": "Ensure use of Binary Authorization (google_container_cluster.primary)",
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "53953124a35c",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_23",
+      "severity": "medium",
+      "category": "missing-network-hardening",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:44-96"
+      ],
+      "sample_message": "Ensure Kubernetes Cluster is created with Alias IP ranges enabled (google_container_cluster.primary)",
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "0d8acda49a79",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_20",
+      "severity": "medium",
+      "category": "missing-network-hardening",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:44-96"
+      ],
+      "sample_message": "Ensure master authorized networks is set to enabled in GKE clusters (google_container_cluster.primary)",
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "8d32bd1d8e72",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_61",
+      "severity": "medium",
+      "category": "missing-network-hardening",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:44-96"
+      ],
+      "sample_message": "Enable VPC Flow Logs and Intranode Visibility (google_container_cluster.primary)",
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "7a97a533c5a2",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_12",
+      "severity": "medium",
+      "category": "missing-pod-isolation",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:44-96"
+      ],
+      "sample_message": "Ensure Network Policy is enabled on Kubernetes Engine Clusters (google_container_cluster.primary)",
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "d4ff712628de",
+      "component": "infrastructure",
+      "tool": "kube-linter",
+      "rule_id": "unset-cpu-requirements",
+      "severity": "medium",
+      "category": "missing-resource-limits",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 4,
+      "locations": [
+        "cloudcart/Deployment/cloudcart-backend",
+        "cloudcart/Job/cloudcart-db-init",
+        "cloudcart/Job/postgres-seed-1"
+      ],
+      "sample_message": "container \"wait-for-postgres\" has cpu request 0",
+      "remediation_notes": [
+        "Set CPU requests for your container based on its requirements. Refer to https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#requests-and-limits for details."
+      ],
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "14bb15f840b3",
+      "component": "infrastructure",
+      "tool": "kube-linter",
+      "rule_id": "unset-memory-requirements",
+      "severity": "medium",
+      "category": "missing-resource-limits",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 4,
+      "locations": [
+        "cloudcart/Deployment/cloudcart-backend",
+        "cloudcart/Job/cloudcart-db-init",
+        "cloudcart/Job/postgres-seed-1"
+      ],
+      "sample_message": "container \"wait-for-postgres\" has memory limit 0",
+      "remediation_notes": [
+        "Set memory limits for your container based on its requirements. Refer to https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#requests-and-limits for details."
+      ],
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "354070e54e2f",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_62",
+      "severity": "medium",
+      "category": "missing-storage-access-logging",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:154-161"
+      ],
+      "sample_message": "Bucket should log access (google_storage_bucket.assets)",
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "6a3ccaf023bb",
+      "component": "infrastructure",
+      "tool": "kube-linter",
+      "rule_id": "latest-tag",
+      "severity": "medium",
+      "category": "mutable-image-tag",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 2,
+      "locations": [
+        "cloudcart/Deployment/cloudcart-backend",
+        "cloudcart/Deployment/cloudcart-frontend"
+      ],
+      "sample_message": "The container \"backend\" is using an invalid container image, \":latest\". Please use images that are not blocked by the `BlockList` criteria : [\".*:(latest)$\" \"^[^:]*$\" \"(.*/[^:]+)$\"]",
+      "remediation_notes": [
+        "Use a container image with a specific tag other than latest."
+      ],
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "e341634ab42c",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_68",
+      "severity": "medium",
+      "category": "node-hardening-gap",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:98-127"
+      ],
+      "sample_message": "Ensure Secure Boot for Shielded GKE Nodes is Enabled (google_container_node_pool.primary_nodes)",
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "be6a83a66fe7",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_106",
+      "severity": "medium",
+      "category": "open-firewall-rule",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:10-29"
+      ],
+      "sample_message": "Ensure Google compute firewall ingress does not allow unrestricted http port 80 access (google_compute_firewall.allow_all)",
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "7bb35e743f73",
+      "component": "infrastructure",
+      "tool": "kube-linter",
+      "rule_id": "no-read-only-root-fs",
+      "severity": "medium",
+      "category": "writable-root-filesystem",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 7,
+      "locations": [
+        "cloudcart/Deployment/cloudcart-backend",
+        "cloudcart/Deployment/cloudcart-frontend",
+        "cloudcart/Job/cloudcart-db-init",
+        "cloudcart/StatefulSet/postgres",
+        "cloudcart/Job/postgres-seed-1"
+      ],
+      "sample_message": "container \"wait-for-postgres\" does not have a read-only root file system",
+      "remediation_notes": [
+        "Set readOnlyRootFilesystem to true in the container securityContext."
+      ],
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "b1ab89155b11",
+      "component": "infrastructure",
+      "tool": "kube-linter",
+      "rule_id": "job-ttl-seconds-after-finished",
+      "severity": "low",
+      "category": "job-lifecycle",
+      "type": "quality",
+      "confidence": "high",
+      "occurrence_count": 2,
+      "locations": [
+        "cloudcart/Job/cloudcart-db-init",
+        "cloudcart/Job/postgres-seed-1"
+      ],
+      "sample_message": "Standalone Job does not specify ttlSecondsAfterFinished",
+      "remediation_notes": [
+        "Set Job.spec.ttlSecondsAfterFinished. Unset CronJob.Spec.JobTemplate.Spec.ttlSecondsAfterFinished."
+      ],
+      "original_severity": "low",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "538a285dee01",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_78",
+      "severity": "low",
+      "category": "missing-bucket-versioning",
+      "type": "quality",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:154-161"
+      ],
+      "sample_message": "Ensure Cloud storage has versioning enabled (google_storage_bucket.assets)",
+      "original_severity": "low",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "f6e547c51ef0",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_65",
+      "severity": "low",
+      "category": "missing-rbac-hardening",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:44-96"
+      ],
+      "sample_message": "Manage Kubernetes RBAC users with Google Groups for GKE (google_container_cluster.primary)",
+      "original_severity": "low",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "654226457bbf",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_9",
+      "severity": "low",
+      "category": "node-pool-maintenance",
+      "type": "quality",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:98-127"
+      ],
+      "sample_message": "Ensure 'Automatic node repair' is enabled for Kubernetes Clusters (google_container_node_pool.primary_nodes)",
+      "original_severity": "low",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "31608f539163",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_10",
+      "severity": "low",
+      "category": "node-pool-maintenance",
+      "type": "quality",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "/terraform/main.tf:98-127"
+      ],
+      "sample_message": "Ensure 'Automatic node upgrade' is enabled for Kubernetes Clusters (google_container_node_pool.primary_nodes)",
+      "original_severity": "low",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "73e307bc47c2",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "disallow-privilege-escalation/autogen-privilege-escalation",
+      "severity": "critical",
+      "category": "privilege-escalation",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 28,
+      "locations": [
+        "cloudcart/ReplicaSet/cloudcart-backend-76d9d9c866",
+        "cloudcart/ReplicaSet/cloudcart-frontend-6bf54d7c9",
+        "cloudcart/ReplicaSet/cloudcart-backend-665d484db7",
+        "cloudcart/Job/postgres-seed-2",
+        "cloudcart/ReplicaSet/cloudcart-frontend-bb4d78db8",
+        "cloudcart/StatefulSet/postgres",
+        "cloudcart/ReplicaSet/cloudcart-frontend-5b6b86b9c6",
+        "cloudcart/Deployment/cloudcart-frontend",
+        "cloudcart/ReplicaSet/cloudcart-frontend-67f596c4b4",
+        "cloudcart/ReplicaSet/cloudcart-frontend-7665f79df6",
+        "cloudcart/ReplicaSet/cloudcart-backend-99d9d6456",
+        "cloudcart/ReplicaSet/cloudcart-backend-65fd946dc4",
+        "cloudcart/ReplicaSet/cloudcart-frontend-54b7bd64fc",
+        "cloudcart/Job/postgres-seed-4",
+        "cloudcart/ReplicaSet/cloudcart-backend-7dfb466f79"
+      ],
+      "sample_message": "validation error: Privilege escalation is disallowed. The fields spec.containers[*].securityContext.allowPrivilegeEscalation, spec.initContainers[*].securityContext.allowPrivilegeEscalation, and spec.ephemeralContainers[*].securityContext.allowPrivilegeEscalation must be set to `false`. rule autogen-privilege-escalation failed at path /spec/template/spec/initContainers/0/securityContext/",
+      "original_severity": "critical",
+      "total_locations": 28,
+      "locations_truncated": true,
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "f913039e3a2a",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "disallow-privilege-escalation/privilege-escalation",
+      "severity": "critical",
+      "category": "privilege-escalation",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 3,
+      "locations": [
+        "cloudcart/Pod/cloudcart-frontend-d9f589957-sw8df",
+        "cloudcart/Pod/postgres-0",
+        "cloudcart/Pod/cloudcart-backend-f7695779f-dhdmh"
+      ],
+      "sample_message": "validation error: Privilege escalation is disallowed. The fields spec.containers[*].securityContext.allowPrivilegeEscalation, spec.initContainers[*].securityContext.allowPrivilegeEscalation, and spec.ephemeralContainers[*].securityContext.allowPrivilegeEscalation must be set to `false`. rule privilege-escalation failed at path /spec/containers/0/securityContext/",
+      "original_severity": "critical",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "3f6606939177",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "verify-image-cosign/autogen-verify-cosign-keyless-signature",
+      "severity": "critical",
+      "category": "unsigned-container-image",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "cloudcart/Deployment/cloudcart-frontend"
+      ],
+      "sample_message": "missing digest for us-central1-docker.pkg.dev/project-0c628a24-2e5e-4878-861/cloudcart-frontend/cloudcart-frontend:9983d61402847721aac6d9bf49357cabe7df8da1",
+      "original_severity": "critical",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "f84f2db980d4",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "verify-image-cosign/verify-cosign-keyless-signature",
+      "severity": "critical",
+      "category": "unsigned-container-image",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "cloudcart/Pod/cloudcart-frontend-d9f589957-sw8df"
+      ],
+      "sample_message": "missing digest for us-central1-docker.pkg.dev/project-0c628a24-2e5e-4878-861/cloudcart-frontend/cloudcart-frontend:9983d61402847721aac6d9bf49357cabe7df8da1",
+      "original_severity": "critical",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "448a793445e1",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "disallow-capabilities-strict/autogen-require-drop-all",
+      "severity": "high",
+      "category": "excessive-capabilities",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 28,
+      "locations": [
+        "cloudcart/ReplicaSet/cloudcart-backend-76d9d9c866",
+        "cloudcart/ReplicaSet/cloudcart-frontend-6bf54d7c9",
+        "cloudcart/ReplicaSet/cloudcart-backend-665d484db7",
+        "cloudcart/Job/postgres-seed-2",
+        "cloudcart/ReplicaSet/cloudcart-frontend-bb4d78db8",
+        "cloudcart/StatefulSet/postgres",
+        "cloudcart/ReplicaSet/cloudcart-frontend-5b6b86b9c6",
+        "cloudcart/Deployment/cloudcart-frontend",
+        "cloudcart/ReplicaSet/cloudcart-frontend-67f596c4b4",
+        "cloudcart/ReplicaSet/cloudcart-frontend-7665f79df6",
+        "cloudcart/ReplicaSet/cloudcart-backend-99d9d6456",
+        "cloudcart/ReplicaSet/cloudcart-backend-65fd946dc4",
+        "cloudcart/ReplicaSet/cloudcart-frontend-54b7bd64fc",
+        "cloudcart/Job/postgres-seed-4",
+        "cloudcart/ReplicaSet/cloudcart-backend-7dfb466f79"
+      ],
+      "sample_message": "validation failure: Containers must drop `ALL` capabilities.",
+      "original_severity": "high",
+      "total_locations": 28,
+      "locations_truncated": true,
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "e9fffb850fa8",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "disallow-capabilities-strict/require-drop-all",
+      "severity": "high",
+      "category": "excessive-capabilities",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 3,
+      "locations": [
+        "cloudcart/Pod/cloudcart-frontend-d9f589957-sw8df",
+        "cloudcart/Pod/postgres-0",
+        "cloudcart/Pod/cloudcart-backend-f7695779f-dhdmh"
+      ],
+      "sample_message": "validation failure: Containers must drop `ALL` capabilities.",
+      "original_severity": "high",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "b5041d14c6bd",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "restrict-seccomp-strict/autogen-check-seccomp-strict",
+      "severity": "high",
+      "category": "missing-seccomp-profile",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 28,
+      "locations": [
+        "cloudcart/ReplicaSet/cloudcart-backend-76d9d9c866",
+        "cloudcart/ReplicaSet/cloudcart-frontend-6bf54d7c9",
+        "cloudcart/ReplicaSet/cloudcart-backend-665d484db7",
+        "cloudcart/Job/postgres-seed-2",
+        "cloudcart/ReplicaSet/cloudcart-frontend-bb4d78db8",
+        "cloudcart/StatefulSet/postgres",
+        "cloudcart/ReplicaSet/cloudcart-frontend-5b6b86b9c6",
+        "cloudcart/Deployment/cloudcart-frontend",
+        "cloudcart/ReplicaSet/cloudcart-frontend-67f596c4b4",
+        "cloudcart/ReplicaSet/cloudcart-frontend-7665f79df6",
+        "cloudcart/ReplicaSet/cloudcart-backend-99d9d6456",
+        "cloudcart/ReplicaSet/cloudcart-backend-65fd946dc4",
+        "cloudcart/ReplicaSet/cloudcart-frontend-54b7bd64fc",
+        "cloudcart/Job/postgres-seed-4",
+        "cloudcart/ReplicaSet/cloudcart-backend-7dfb466f79"
+      ],
+      "sample_message": "validation error: Use of custom Seccomp profiles is disallowed. The fields spec.securityContext.seccompProfile.type, spec.containers[*].securityContext.seccompProfile.type, spec.initContainers[*].securityContext.seccompProfile.type, and spec.ephemeralContainers[*].securityContext.seccompProfile.type must be set to `RuntimeDefault` or `Localhost`. rule autogen-check-seccomp-strict[0] failed at path /spec/template/spec/securityContext/seccompProfile/ rule autogen-check-seccomp-strict[1] failed at path /spec/template/spec/initContainers/0/securityContext/",
+      "original_severity": "high",
+      "total_locations": 28,
+      "locations_truncated": true,
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "1a438da1f2bb",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "restrict-seccomp-strict/check-seccomp-strict",
+      "severity": "high",
+      "category": "missing-seccomp-profile",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 3,
+      "locations": [
+        "cloudcart/Pod/cloudcart-frontend-d9f589957-sw8df",
+        "cloudcart/Pod/postgres-0",
+        "cloudcart/Pod/cloudcart-backend-f7695779f-dhdmh"
+      ],
+      "sample_message": "validation error: Use of custom Seccomp profiles is disallowed. The fields spec.securityContext.seccompProfile.type, spec.containers[*].securityContext.seccompProfile.type, spec.initContainers[*].securityContext.seccompProfile.type, and spec.ephemeralContainers[*].securityContext.seccompProfile.type must be set to `RuntimeDefault` or `Localhost`. rule check-seccomp-strict[0] failed at path /spec/securityContext/seccompProfile/ rule check-seccomp-strict[1] failed at path /spec/containers/0/securityContext/",
+      "original_severity": "high",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "79abedf3ae77",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "require-run-as-nonroot/autogen-run-as-non-root",
+      "severity": "high",
+      "category": "run-as-root",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 28,
+      "locations": [
+        "cloudcart/ReplicaSet/cloudcart-backend-76d9d9c866",
+        "cloudcart/ReplicaSet/cloudcart-frontend-6bf54d7c9",
+        "cloudcart/ReplicaSet/cloudcart-backend-665d484db7",
+        "cloudcart/Job/postgres-seed-2",
+        "cloudcart/ReplicaSet/cloudcart-frontend-bb4d78db8",
+        "cloudcart/StatefulSet/postgres",
+        "cloudcart/ReplicaSet/cloudcart-frontend-5b6b86b9c6",
+        "cloudcart/Deployment/cloudcart-frontend",
+        "cloudcart/ReplicaSet/cloudcart-frontend-67f596c4b4",
+        "cloudcart/ReplicaSet/cloudcart-frontend-7665f79df6",
+        "cloudcart/ReplicaSet/cloudcart-backend-99d9d6456",
+        "cloudcart/ReplicaSet/cloudcart-backend-65fd946dc4",
+        "cloudcart/ReplicaSet/cloudcart-frontend-54b7bd64fc",
+        "cloudcart/Job/postgres-seed-4",
+        "cloudcart/ReplicaSet/cloudcart-backend-7dfb466f79"
+      ],
+      "sample_message": "validation error: Running as root is not allowed. Either the field spec.securityContext.runAsNonRoot must be set to `true`, or the fields spec.containers[*].securityContext.runAsNonRoot, spec.initContainers[*].securityContext.runAsNonRoot, and spec.ephemeralContainers[*].securityContext.runAsNonRoot must be set to `true`. rule autogen-run-as-non-root[0] failed at path /spec/template/spec/securityContext/runAsNonRoot/ rule autogen-run-as-non-root[1] failed at path /spec/template/spec/initContainers/0/securityContext/",
+      "original_severity": "high",
+      "total_locations": 28,
+      "locations_truncated": true,
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "55a0910c0cd3",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "require-run-as-nonroot/run-as-non-root",
+      "severity": "high",
+      "category": "run-as-root",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 3,
+      "locations": [
+        "cloudcart/Pod/cloudcart-frontend-d9f589957-sw8df",
+        "cloudcart/Pod/postgres-0",
+        "cloudcart/Pod/cloudcart-backend-f7695779f-dhdmh"
+      ],
+      "sample_message": "validation error: Running as root is not allowed. Either the field spec.securityContext.runAsNonRoot must be set to `true`, or the fields spec.containers[*].securityContext.runAsNonRoot, spec.initContainers[*].securityContext.runAsNonRoot, and spec.ephemeralContainers[*].securityContext.runAsNonRoot must be set to `true`. rule run-as-non-root[0] failed at path /spec/securityContext/runAsNonRoot/ rule run-as-non-root[1] failed at path /spec/containers/0/securityContext/",
+      "original_severity": "high",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "b61baaa6715e",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "require-requests-limits/autogen-validate-resources",
+      "severity": "medium",
+      "category": "missing-resource-limits",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 15,
+      "locations": [
+        "cloudcart/ReplicaSet/cloudcart-backend-76d9d9c866",
+        "cloudcart/ReplicaSet/cloudcart-backend-665d484db7",
+        "cloudcart/Job/postgres-seed-2",
+        "cloudcart/ReplicaSet/cloudcart-backend-99d9d6456",
+        "cloudcart/ReplicaSet/cloudcart-backend-65fd946dc4",
+        "cloudcart/Job/postgres-seed-4",
+        "cloudcart/ReplicaSet/cloudcart-backend-7dfb466f79",
+        "cloudcart/Job/postgres-seed-3",
+        "cloudcart/ReplicaSet/cloudcart-backend-65cdb7dfd9",
+        "cloudcart/ReplicaSet/cloudcart-backend-8548cf479d",
+        "cloudcart/ReplicaSet/cloudcart-backend-dd4bfd45b",
+        "cloudcart/ReplicaSet/cloudcart-backend-f7695779f",
+        "cloudcart/Deployment/cloudcart-backend",
+        "cloudcart/ReplicaSet/cloudcart-backend-67bf56ccf9",
+        "cloudcart/ReplicaSet/cloudcart-backend-7447fb87b6"
+      ],
+      "sample_message": "validation error: CPU and memory resource requests and memory limits are required for containers. rule autogen-validate-resources failed at path /spec/template/spec/initContainers/0/resources/limits/",
+      "original_severity": "medium",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "878cafbe18a3",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "require-requests-limits/validate-resources",
+      "severity": "medium",
+      "category": "missing-resource-limits",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "cloudcart/Pod/cloudcart-backend-f7695779f-dhdmh"
+      ],
+      "sample_message": "validation error: CPU and memory resource requests and memory limits are required for containers. rule validate-resources failed at path /spec/initContainers/0/resources/limits/",
+      "original_severity": "medium",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "7bee09ed010a",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "10038-1",
+      "severity": "medium",
+      "category": "missing-security-headers",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 3,
+      "locations": [
+        "http://35.224.10.204/",
+        "http://35.224.10.204/robots.txt",
+        "http://35.224.10.204/sitemap.xml"
+      ],
+      "sample_message": "Content Security Policy (CSP) Header Not Set",
+      "original_severity": "medium",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "c2b6922903f8",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "10020-1",
+      "severity": "medium",
+      "category": "missing-security-headers",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 1,
+      "locations": [
+        "http://35.224.10.204/robots.txt"
+      ],
+      "sample_message": "Missing Anti-clickjacking Header",
+      "original_severity": "medium",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "e740e47fd18f",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "10036-2",
+      "severity": "low",
+      "category": "info-disclosure",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 5,
+      "locations": [
+        "http://35.224.10.204/",
+        "http://35.224.10.204/assets/index-1d7bd94c.css",
+        "http://35.224.10.204/cloudcart.svg",
+        "http://35.224.10.204/robots.txt",
+        "http://35.224.10.204/sitemap.xml"
+      ],
+      "sample_message": "Server Leaks Version Information via \"Server\" HTTP Response Header Field",
+      "original_severity": "low",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "759bc35cc9e9",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "90004-2",
+      "severity": "low",
+      "category": "missing-security-headers",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 3,
+      "locations": [
+        "http://35.224.10.204/",
+        "http://35.224.10.204/robots.txt",
+        "http://35.224.10.204/sitemap.xml"
+      ],
+      "sample_message": "Cross-Origin-Embedder-Policy Header Missing or Invalid",
+      "original_severity": "low",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "87a7177a3187",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "90004-3",
+      "severity": "low",
+      "category": "missing-security-headers",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 3,
+      "locations": [
+        "http://35.224.10.204/",
+        "http://35.224.10.204/robots.txt",
+        "http://35.224.10.204/sitemap.xml"
+      ],
+      "sample_message": "Cross-Origin-Opener-Policy Header Missing or Invalid",
+      "original_severity": "low",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "5456ed675fa3",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "90004-1",
+      "severity": "low",
+      "category": "missing-security-headers",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 3,
+      "locations": [
+        "http://35.224.10.204/",
+        "http://35.224.10.204/robots.txt",
+        "http://35.224.10.204/sitemap.xml"
+      ],
+      "sample_message": "Cross-Origin-Resource-Policy Header Missing or Invalid",
+      "original_severity": "low",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "1d1396415f16",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "10063-1",
+      "severity": "low",
+      "category": "missing-security-headers",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 4,
+      "locations": [
+        "http://35.224.10.204/",
+        "http://35.224.10.204/assets/index-526f79c7.js",
+        "http://35.224.10.204/robots.txt",
+        "http://35.224.10.204/sitemap.xml"
+      ],
+      "sample_message": "Permissions Policy Header Not Set",
+      "original_severity": "low",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "43184d5b328f",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "10021",
+      "severity": "low",
+      "category": "missing-security-headers",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 5,
+      "locations": [
+        "http://35.224.10.204/",
+        "http://35.224.10.204/assets/index-1d7bd94c.css",
+        "http://35.224.10.204/cloudcart.svg",
+        "http://35.224.10.204/robots.txt",
+        "http://35.224.10.204/sitemap.xml"
+      ],
+      "sample_message": "X-Content-Type-Options Header Missing",
+      "original_severity": "low",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "824c1c4889cf",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "10109",
+      "severity": "informational",
+      "category": "informational-finding",
+      "type": "quality",
+      "confidence": "medium",
+      "occurrence_count": 3,
+      "locations": [
+        "http://35.224.10.204/",
+        "http://35.224.10.204/robots.txt",
+        "http://35.224.10.204/sitemap.xml"
+      ],
+      "sample_message": "Modern Web Application",
+      "original_severity": "informational",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "bec7568be454",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "10049-3",
+      "severity": "informational",
+      "category": "insecure-caching",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 5,
+      "locations": [
+        "http://35.224.10.204/",
+        "http://35.224.10.204/assets/index-1d7bd94c.css",
+        "http://35.224.10.204/cloudcart.svg",
+        "http://35.224.10.204/robots.txt",
+        "http://35.224.10.204/sitemap.xml"
+      ],
+      "sample_message": "Storable and Cacheable Content",
+      "original_severity": "informational",
+      "domain": "runtime_security"
+    }
+  ],
+  "remediation_guide": {
+    "missing-security-headers": "Add the missing HTTP security header (e.g. Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security) at the web server, reverse proxy, or application framework level.",
+    "info-disclosure": "Avoid returning stack traces or internal error details to end users; log details server-side and return a generic error message.",
+    "informational-finding": "No action needed \u2014 this is an FYI-level observation about the application, not a vulnerability.",
+    "insecure-caching": "Set Cache-Control: no-store (and Pragma: no-cache for older clients) on any response containing sensitive or user-specific data; static assets can remain cacheable.",
+    "excessive-capabilities": "Drop all Linux capabilities (`drop: [\"ALL\"]`) and add back only the specific ones this container actually needs, rather than keeping the default set.",
+    "privilege-escalation": "Set `allowPrivilegeEscalation: false` in the container's securityContext, so a process can't gain more privileges than its parent (e.g. via a setuid binary).",
+    "missing-resource-limits": "Set explicit CPU/memory `requests` and `limits` on every container. Without limits, a single misbehaving pod can exhaust node resources and affect other workloads.",
+    "run-as-root": "Set `runAsNonRoot: true` (and a non-zero `runAsUser`) in the pod or container securityContext, so the process can't run as root even if the image itself doesn't define a non-root user.",
+    "missing-seccomp-profile": "Set `securityContext.seccompProfile.type` to `RuntimeDefault` (or `Localhost` with a named profile) at the pod or container level, instead of leaving it unset/Unconfined.",
+    "unsigned-container-image": "Ensure the image was built and signed by the expected CI workflow (`cosign sign --yes`, keyless via GitHub Actions OIDC) before it can be deployed. If this fires on a legitimate image, confirm the signing step in backend-ci.yaml/frontend-ci.yaml actually ran and succeeded for this exact image digest.",
+    "mutable-image-tag": "Pin the image to a specific, immutable tag or digest rather than `:latest` \u2014 without this, you can't reliably audit or reproduce exactly what's running.",
+    "writable-root-filesystem": "Set `readOnlyRootFilesystem: true` in the container's securityContext, and mount an explicit writable volume for any path that genuinely needs write access.",
+    "job-lifecycle": "Set `spec.ttlSecondsAfterFinished` on Jobs so completed/failed Job objects (and their pods) are automatically cleaned up instead of accumulating indefinitely in the cluster.",
+    "open-firewall-rule": "Restrict the firewall rule's `source_ranges` to specific known CIDR blocks instead of 0.0.0.0/0, and scope `allow` blocks to only the ports actually required rather than a full port range.",
+    "workload-identity-disabled": "Set `workload_metadata_config.mode = \"GKE_METADATA\"` on the node pool and enable `workload_identity_config` on the cluster, so pods can use scoped per-workload IAM identities instead of inheriting the node's Compute Engine service account.",
+    "missing-cluster-logging-monitoring": "Set `logging_service` and `monitoring_service` to their Stackdriver/Cloud Operations values (e.g. \"logging.googleapis.com/kubernetes\", \"monitoring.googleapis.com/kubernetes\") instead of \"none\", so cluster activity is actually auditable.",
+    "legacy-cluster-auth": "Set `enable_legacy_abac = false` and `master_auth.client_certificate_config.issue_client_certificate = false`; rely on Kubernetes RBAC and IAM-based authentication instead of these deprecated mechanisms.",
+    "missing-network-hardening": "Enable the flagged cluster-level network control (master authorized networks, alias IP ranges, or VPC flow logs/intranode visibility) \u2014 each narrows the cluster's network attack surface or improves traffic visibility.",
+    "missing-rbac-hardening": "Configure `authenticator_groups_config` to manage cluster RBAC access via Google Groups instead of individually-granted IAM bindings, for centralized access review.",
+    "missing-binary-authorization": "Enable Binary Authorization on the cluster so only signed, attested container images can be deployed.",
+    "missing-pod-isolation": "Add a NetworkPolicy scoping which pods/namespaces can actually reach this workload, rather than leaving it reachable from anything else in the cluster by default.",
+    "node-pool-maintenance": "Enable `management.auto_repair` and `management.auto_upgrade` on the node pool so unhealthy or outdated nodes are remediated automatically instead of silently drifting.",
+    "node-hardening-gap": "Enable Shielded VM Secure Boot (`shielded_instance_config.enable_secure_boot = true`) on the node pool to prevent loading unsigned/malicious boot components.",
+    "excessive-iam-privilege": "Replace the basic role (Owner/Editor/Viewer) or service-account-impersonation-capable role with the narrowest predefined or custom role that covers the actual required permissions \u2014 Owner on a Compute Engine default service account is effectively full project compromise if that SA's key or node is ever exposed.",
+    "missing-storage-access-logging": "Configure a `logging` block on the bucket pointing to a separate log-sink bucket, so object access is auditable.",
+    "missing-bucket-versioning": "Enable object versioning on the bucket so an accidental overwrite or delete can be recovered rather than being permanent.",
+    "public-storage-bucket-risk": "Enable `uniform_bucket_level_access` and set the bucket's public access prevention to enforced, so objects can't be made public via legacy per-object ACLs even if a future config change tries to."
+  },
+  "scan_status": {
+    "backend": {
+      "codeql": "SKIPPED",
+      "sonarcloud": "SKIPPED",
+      "gitguardian": "SKIPPED",
+      "snyk_sca": "SKIPPED",
+      "snyk": "NOT_CONFIGURED",
+      "syft": "NOT_CONFIGURED"
+    },
+    "frontend": {
+      "codeql": "SKIPPED",
+      "sonarcloud": "SKIPPED",
+      "gitguardian": "SKIPPED",
+      "snyk_sca": "SKIPPED",
+      "snyk": "NOT_CONFIGURED",
+      "syft": "NOT_CONFIGURED"
+    },
+    "deployed-app": {
+      "zap": "NOT_CONFIGURED",
+      "kyverno": "NOT_CONFIGURED",
+      "kubearmor": "NOT_CONFIGURED"
+    },
+    "infrastructure": {
+      "kube-linter": "SUCCESS",
+      "kubeconform": "SUCCESS"
+    },
+    "terraform": {
+      "checkov": "SUCCESS",
+      "terraform-validate": "SUCCESS"
+    }
+  },
+  "release_statistics": {
+    "total_findings": 54,
+    "by_severity": {
+      "critical": 10,
+      "high": 15,
+      "medium": 16,
+      "low": 11,
+      "informational": 2
+    },
+    "by_category": {
+      "excessive-iam-privilege": 2,
+      "open-firewall-rule": 6,
+      "public-storage-bucket-risk": 2,
+      "legacy-cluster-auth": 2,
+      "missing-cluster-logging-monitoring": 2,
+      "run-as-root": 3,
+      "workload-identity-disabled": 1,
+      "missing-binary-authorization": 1,
+      "missing-network-hardening": 3,
+      "missing-pod-isolation": 1,
+      "missing-resource-limits": 4,
+      "missing-storage-access-logging": 1,
+      "mutable-image-tag": 1,
+      "node-hardening-gap": 1,
+      "writable-root-filesystem": 1,
+      "job-lifecycle": 1,
+      "missing-bucket-versioning": 1,
+      "missing-rbac-hardening": 1,
+      "node-pool-maintenance": 2,
+      "privilege-escalation": 2,
+      "unsigned-container-image": 2,
+      "excessive-capabilities": 2,
+      "missing-seccomp-profile": 2,
+      "missing-security-headers": 7,
+      "info-disclosure": 1,
+      "informational-finding": 1,
+      "insecure-caching": 1
+    },
+    "by_component": {
+      "terraform": 26,
+      "infrastructure": 6,
+      "deployed-app": 22
+    },
+    "by_domain": {
+      "infrastructure_security": 32,
+      "runtime_security": 22
+    }
+  },
+  "sbom_summary": {
+    "backend": {
+      "total_packages": 0,
+      "by_ecosystem": {},
+      "packages_with_known_vulnerabilities": []
+    },
+    "frontend": {
+      "total_packages": 0,
+      "by_ecosystem": {},
+      "packages_with_known_vulnerabilities": []
+    }
+  },
+  "dependency_summary": {
+    "backend": {
+      "vulnerable_dependencies": 0,
+      "critical_dependencies": 0,
+      "high_dependencies": 0,
+      "top_vulnerable_packages": []
+    },
+    "frontend": {
+      "vulnerable_dependencies": 0,
+      "critical_dependencies": 0,
+      "high_dependencies": 0,
+      "top_vulnerable_packages": []
+    }
+  },
+  "supply_chain": {
+    "backend": {
+      "image_signed": "unknown",
+      "signature_verified": false,
+      "verification_notes": "r.pkg.dev/v2/project-0c628a24-2e5e-4878-861/cloudcart-backend/cloudcart-backend/manifests/93d9a5a47017c888fb9a5e358b6b4ec47e872dca: MANIFEST_UNKNOWN: Failed to fetch \"93d9a5a47017c888fb9a5e358b6b4ec47e872dca\"\nerror during command execution: image tag not found: GET https://us-central1-docker.pkg.dev/v2/project-0c628a24-2e5e-4878-861/cloudcart-backend/cloudcart-backend/manifests/93d9a5a47017c888fb9a5e358b6b4ec47e872dca: MANIFEST_UNKNOWN: Failed to fetch \"93d9a5a47017c888fb9a5e358b6b4ec47e872dca\"\n",
+      "verification_status": "UNKNOWN"
+    },
+    "frontend": {
+      "image_signed": "unknown",
+      "signature_verified": false,
+      "verification_notes": "g.dev/v2/project-0c628a24-2e5e-4878-861/cloudcart-frontend/cloudcart-frontend/manifests/93d9a5a47017c888fb9a5e358b6b4ec47e872dca: MANIFEST_UNKNOWN: Failed to fetch \"93d9a5a47017c888fb9a5e358b6b4ec47e872dca\"\nerror during command execution: image tag not found: GET https://us-central1-docker.pkg.dev/v2/project-0c628a24-2e5e-4878-861/cloudcart-frontend/cloudcart-frontend/manifests/93d9a5a47017c888fb9a5e358b6b4ec47e872dca: MANIFEST_UNKNOWN: Failed to fetch \"93d9a5a47017c888fb9a5e358b6b4ec47e872dca\"\n",
+      "verification_status": "UNKNOWN"
+    }
+  },
+  "signal_availability": {
+    "severity": "available_per_finding",
+    "confidence": "available_per_finding",
+    "fix_availability": "available_per_finding_where_applicable",
+    "delta_status": "not_collected",
+    "reachability": "not_collected",
+    "exploitability": "not_collected",
+    "business_impact": "not_collected",
+    "internet_exposure": "not_collected"
+  },
+  "schema_validation": {
+    "valid": true,
+    "summary": {
+      "resources": [],
+      "summary": {
+        "valid": 14,
+        "invalid": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "terraform_validation": {
+    "valid": true,
+    "error_count": 0,
+    "summary": {
+      "format_version": "1.0",
+      "valid": true,
+      "error_count": 0,
+      "warning_count": 0,
+      "diagnostics": []
+    }
+  }
+}

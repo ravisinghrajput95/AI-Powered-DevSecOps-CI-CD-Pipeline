@@ -1,0 +1,437 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "a276b0c8eaef3ba9",
+  "generated_at": "2026-06-27T19:17:43.386531+00:00",
+  "release_context_ref": {
+    "repository": "ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline",
+    "version": "93d9a5a47017c888fb9a5e358b6b4ec47e872dca",
+    "generated_at": "2026-06-27T19:12:42.550881+00:00"
+  },
+  "executive_summary": {
+    "overall_health": "CRITICAL",
+    "deployment_confidence": "LOW",
+    "dominant_risk_themes": [
+      "Privilege escalation enabled across deployed workloads",
+      "Unverified container image supply chain",
+      "Unrestricted firewall rules exposing compute layer",
+      "Excessive IAM privilege at project level",
+      "Deployed pods running as root without seccomp",
+      "Application security scans skipped for this release"
+    ],
+    "narrative": "This release presents a critical security posture across both infrastructure configuration and live runtime enforcement. Ten critical and fifteen high-severity findings span infrastructure_security and runtime_security domains, with no compensating controls evident in the data. The most urgent concern is that privilege escalation is actively permitted across 28+ deployed workload locations in the live cluster, confirmed by Kyverno policy failures \u2014 this is not a configuration drift risk but an active runtime exposure. Compounding this, container image signature verification failed with MANIFEST_UNKNOWN for both backend and frontend images, meaning the supply chain integrity of what is actually running cannot be confirmed for this release commit. On the infrastructure side, Terraform defines a firewall rule that allows unrestricted SSH, RDP, and MySQL ingress from 0.0.0.0/0, and grants the Compute Engine service account Owner-level basic roles at the project level \u2014 a combination that, if the node or service account is ever compromised, amounts to full project takeover. Workload Identity is disabled, meaning pods inherit the node's Compute Engine service account identity rather than scoped per-workload credentials, which directly amplifies the IAM blast radius. Critically, all application-layer security scans (CodeQL, SonarCloud, GitGuardian, Snyk SCA) were SKIPPED for both backend and frontend components this cycle \u2014 there is no static analysis, secrets detection, or dependency vulnerability signal for the application code in this release. This is not a gap in a single tool; it is a complete blind spot across the application security domain. The infrastructure scan data is also from a different commit than the application security data (provenance mismatch), though the infra/app split is expected given the pipeline's trigger design. Runtime scans are fresh (0 days stale). Given the combination of active runtime privilege escalation, unverifiable image provenance, open network perimeter, and missing application-layer scanning, this release is not ready for production deployment."
+  },
+  "cross_domain_correlations": [
+    {
+      "correlation_id": "CORR-001",
+      "title": "Workload Identity Disabled + Excessive IAM = Amplified Blast Radius",
+      "description": "Terraform defines Owner-level basic IAM roles for the Compute Engine service account and disables GKE Workload Identity (GKE Metadata Server not enabled). Without Workload Identity, every pod running on the cluster inherits the node's Compute Engine service account identity. Because that account holds project-level Owner/Editor privileges, any pod-level compromise \u2014 made easier by the privilege escalation findings in the deployed workloads \u2014 can directly pivot to full GCP project control.",
+      "business_impact": "A single compromised container in the cluster could gain full GCP project-owner access, enabling exfiltration of all project data, destruction of infrastructure, and lateral movement to any GCP service in the project.",
+      "confidence": "HIGH",
+      "affected_domains": [
+        "infrastructure_security",
+        "runtime_security"
+      ],
+      "supporting_evidence": [
+        "0487801b1fb6",
+        "54c214b711d1",
+        "f1f751c2ee51",
+        "73e307bc47c2",
+        "f913039e3a2a"
+      ],
+      "recommended_action": "Immediately restrict the Compute Engine service account IAM role to least-privilege, enable Workload Identity on the GKE cluster and node pool, and set allowPrivilegeEscalation: false across all deployed workloads. These three changes together close the privilege escalation-to-IAM-takeover path."
+    },
+    {
+      "correlation_id": "CORR-002",
+      "title": "Unsigned Images + Missing Binary Authorization = Unverifiable Runtime Workloads",
+      "description": "Supply chain verification returned UNKNOWN for both backend and frontend images (MANIFEST_UNKNOWN \u2014 image not found at the release commit tag). Kyverno's verify-image-cosign policy simultaneously flags that the deployed frontend image is missing a cosign digest. Binary Authorization is not enabled on the cluster (Terraform finding). These three signals together mean: no signing happened or is verifiable, no admission control gate exists to enforce signing at deploy time, and the currently-running image cannot be traced back to a known-good build.",
+      "business_impact": "There is no technical guarantee that what is running in the cluster was produced by the expected CI pipeline. A tampered or substituted image could be running undetected.",
+      "confidence": "HIGH",
+      "affected_domains": [
+        "runtime_security",
+        "container_security",
+        "supply_chain"
+      ],
+      "supporting_evidence": [
+        "3f6606939177",
+        "f84f2db980d4",
+        "6cb8ab1f3f5f"
+      ],
+      "recommended_action": "Ensure the cosign signing step runs and succeeds in CI for the exact image digest being deployed. Enable Binary Authorization on the GKE cluster to enforce signed-image admission as a hard gate. Investigate the MANIFEST_UNKNOWN error \u2014 the release commit SHA may not have been pushed as an image tag."
+    },
+    {
+      "correlation_id": "CORR-003",
+      "title": "Open Firewall + Missing Cluster Logging = Undetectable Perimeter Compromise",
+      "description": "Terraform exposes unrestricted SSH, RDP, MySQL, and FTP ingress from 0.0.0.0/0, while simultaneously disabling Stackdriver Logging and Monitoring on the GKE cluster. An attacker reaching the compute layer via the open firewall rules would have no audit trail generated at the cluster level, making the intrusion effectively invisible until out-of-band detection occurs.",
+      "business_impact": "Perimeter compromise via open firewall rules would be undetected and unauditable, significantly increasing dwell time and data exfiltration risk.",
+      "confidence": "HIGH",
+      "affected_domains": [
+        "infrastructure_security"
+      ],
+      "supporting_evidence": [
+        "57df84a4027d",
+        "dbbdc1cf61c2",
+        "3ba928b4fd97",
+        "382c6fe86e55",
+        "e5f32d7b4723",
+        "5ecd8d3a4ddb",
+        "d8a03f87214b"
+      ],
+      "recommended_action": "Restrict all firewall rules to known source CIDRs and required ports only. Enable Stackdriver Logging and Monitoring on the GKE cluster so that any successful intrusion via the network perimeter generates an auditable trail."
+    },
+    {
+      "correlation_id": "CORR-004",
+      "title": "Run-as-Root Confirmed at Both Config and Runtime Layers",
+      "description": "Kube-linter flags 7 infrastructure manifest containers not configured for runAsNonRoot. Kyverno independently confirms that 28+ deployed workload locations are violating the require-run-as-nonroot policy at runtime. This is the same root cause \u2014 missing securityContext configuration \u2014 confirmed by two tools at two layers (pre-deploy manifest check and live cluster admission enforcement), meaning the misconfiguration survived from infrastructure definition through to the running cluster.",
+      "business_impact": "Processes running as root inside containers have a significantly larger exploitation surface \u2014 a container escape or vulnerability exploitation has immediate root-level access to the node's filesystem and kernel interfaces.",
+      "confidence": "HIGH",
+      "affected_domains": [
+        "infrastructure_security",
+        "runtime_security"
+      ],
+      "supporting_evidence": [
+        "a37e4f16b0ef",
+        "79abedf3ae77",
+        "55a0910c0cd3"
+      ],
+      "recommended_action": "Set runAsNonRoot: true and a non-zero runAsUser in all pod and container securityContext definitions. Fix at the Helm chart / manifest source level so the correction flows through both kube-linter (pre-deploy) and Kyverno (runtime) validation."
+    },
+    {
+      "correlation_id": "CORR-005",
+      "title": "Application Security Domain Entirely Dark \u2014 No Static, Secret, or SCA Signal",
+      "description": "All application-layer scans (CodeQL, SonarCloud, GitGuardian, Snyk SCA) are SKIPPED for both backend and frontend. The SBOM summary shows zero packages for both components. This means the entire application_security domain has produced no signal for this release \u2014 not 'clean', but 'unexamined'. Any vulnerabilities in application code, hardcoded secrets, or vulnerable dependencies in backend/frontend are entirely unknown for this release commit.",
+      "business_impact": "The absence of application security signal is not equivalent to absence of risk. Critical vulnerabilities in application code or supply chain dependencies could exist undetected and reach production.",
+      "confidence": "HIGH",
+      "affected_domains": [
+        "application_security",
+        "supply_chain"
+      ],
+      "supporting_evidence": [
+        "3f6606939177",
+        "f84f2db980d4"
+      ],
+      "recommended_action": "Investigate why all application-layer scans were SKIPPED (likely the trigger condition \u2014 backend/**/frontend/** path filters were not matched by this commit). Ensure at least one full scan cycle runs and passes before approving any production deployment. Consider making scan completion a required CI gate rather than a path-triggered optional step."
+    }
+  ],
+  "top_risks": [
+    {
+      "risk_id": "RISK-001",
+      "title": "Privilege Escalation Permitted Across Live Deployed Workloads",
+      "impact": "Any process inside a deployed container can escalate privileges via setuid binaries or kernel exploits, effectively gaining root-equivalent access within the pod and increasing the likelihood of a successful container escape.",
+      "why_it_matters": "This is a confirmed runtime enforcement failure, not a theoretical config gap \u2014 Kyverno is actively blocking policy compliance across 28+ workload locations in the live cluster. Combined with the run-as-root findings and lack of seccomp profiles, the container isolation boundary is not functioning as intended.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "73e307bc47c2",
+        "f913039e3a2a"
+      ],
+      "recommended_action": "Set allowPrivilegeEscalation: false in every container and initContainer securityContext. Pair with runAsNonRoot: true and a RuntimeDefault seccomp profile to establish a complete container hardening baseline."
+    },
+    {
+      "risk_id": "RISK-002",
+      "title": "Project-Level Owner IAM Role on Compute Engine Service Account with Workload Identity Disabled",
+      "impact": "The Compute Engine default service account holds project-level Owner (basic role) privileges. Because Workload Identity is disabled, all pods in the cluster inherit this identity. A single pod compromise grants an attacker full GCP project control.",
+      "why_it_matters": "This is a critical infrastructure finding with a direct, high-confidence exploit path: pod compromise \u2192 node SA credentials \u2192 project Owner access. The blast radius is the entire GCP project.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "0487801b1fb6",
+        "54c214b711d1",
+        "f1f751c2ee51"
+      ],
+      "recommended_action": "Immediately replace the basic Owner/Editor roles with narrowly-scoped predefined or custom roles. Enable Workload Identity on the cluster and node pool simultaneously so pods no longer inherit the node SA."
+    },
+    {
+      "risk_id": "RISK-003",
+      "title": "Unverifiable Container Image Supply Chain for This Release",
+      "impact": "Both backend and frontend image signatures cannot be verified (MANIFEST_UNKNOWN). The release commit SHA was not found in the container registry, meaning the images deployed may not correspond to this release's source code.",
+      "why_it_matters": "This is not merely a policy gap \u2014 the supply chain verification tool actively failed to find the image for the release commit. What is running in the cluster is unverifiable. Binary Authorization is also absent, removing the last enforcement gate.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "3f6606939177",
+        "f84f2db980d4",
+        "6cb8ab1f3f5f"
+      ],
+      "recommended_action": "Confirm whether the backend and frontend images were successfully built and pushed for commit 93d9a5a47017. Ensure cosign signing runs as part of the CI pipeline for the exact digest being deployed. Enable Binary Authorization to enforce admission-time verification."
+    },
+    {
+      "risk_id": "RISK-004",
+      "title": "Unrestricted Firewall Rules Exposing SSH, RDP, and MySQL to 0.0.0.0/0",
+      "impact": "The compute layer is directly reachable from the public internet on SSH (22), RDP (3389), MySQL (3306), FTP (20/21), and HTTP (80) ports. Any vulnerability in exposed services, or use of weak/default credentials, results in direct node-level compromise.",
+      "why_it_matters": "Open firewall rules to 0.0.0.0/0 on administrative and database ports are among the most commonly exploited misconfigurations in cloud environments. Combined with missing cluster logging, exploitation would be difficult to detect.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "57df84a4027d",
+        "dbbdc1cf61c2",
+        "3ba928b4fd97",
+        "382c6fe86e55",
+        "e5f32d7b4723",
+        "be6a83a66fe7"
+      ],
+      "recommended_action": "Restrict all firewall rules to specific known CIDR blocks. Remove or restrict SSH/RDP/MySQL/FTP ingress rules entirely from internet-facing rules; use VPN or IAP for administrative access."
+    },
+    {
+      "risk_id": "RISK-005",
+      "title": "Complete Absence of Application Security Scanning for This Release",
+      "impact": "No static analysis, secrets detection, or dependency vulnerability signal exists for backend or frontend application code in this release. Vulnerabilities, hardcoded secrets, or vulnerable dependencies in the application layer are entirely unknown.",
+      "why_it_matters": "All four application-layer scanners (CodeQL, SonarCloud, GitGuardian, Snyk SCA) returned SKIPPED. The SBOM shows zero packages. This is a complete blind spot \u2014 the report cannot claim the application code is safe, only that it was not examined.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "73e307bc47c2",
+        "f913039e3a2a"
+      ],
+      "recommended_action": "Determine the root cause of all scans being SKIPPED (likely path-trigger conditions not matching). Run a full application security scan cycle before this release proceeds. Treat scan completion as a blocking gate."
+    },
+    {
+      "risk_id": "RISK-006",
+      "title": "Containers Running as Root with No Seccomp Profile",
+      "impact": "Deployed workloads run as root without a seccomp profile, maximizing the kernel syscall surface available to a compromised container process.",
+      "why_it_matters": "Confirmed at runtime by Kyverno across 28+ locations. The combination of root user + unrestricted syscalls + privilege escalation (RISK-001) means the container isolation boundary provides minimal protection.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "79abedf3ae77",
+        "55a0910c0cd3",
+        "b5041d14c6bd",
+        "1a438da1f2bb"
+      ],
+      "recommended_action": "Set runAsNonRoot: true, a non-zero runAsUser, and seccompProfile.type: RuntimeDefault in all pod and container securityContext definitions."
+    },
+    {
+      "risk_id": "RISK-007",
+      "title": "Legacy Kubernetes Authentication and Client Certificate Auth Enabled",
+      "impact": "Legacy ABAC authorization and client certificate authentication are enabled on the GKE cluster, providing alternative, harder-to-audit authentication paths that bypass modern RBAC controls.",
+      "why_it_matters": "Legacy auth mechanisms are frequently targeted in GKE attacks and complicate access review. Their presence alongside missing RBAC Google Groups integration means cluster access control is both weak and difficult to audit.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "f35ff7111aaa",
+        "d4cac2b72249",
+        "f6e547c51ef0"
+      ],
+      "recommended_action": "Disable legacy ABAC (enable_legacy_abac = false) and client certificate issuance (issue_client_certificate = false). Configure Google Groups-based RBAC for centralized access management."
+    },
+    {
+      "risk_id": "RISK-008",
+      "title": "Public Cloud Storage Bucket Without Access Prevention or Audit Logging",
+      "impact": "The Cloud Storage bucket lacks public access prevention enforcement and uniform bucket-level access, meaning objects can be made publicly accessible via per-object ACLs. Access logging is also absent, so any accidental exposure would be undetected.",
+      "why_it_matters": "A single misconfigured object upload or ACL change could expose sensitive data publicly with no audit trail.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "189191849e41",
+        "724685b547f7",
+        "354070e54e2f"
+      ],
+      "recommended_action": "Set public_access_prevention = enforced and enable uniform_bucket_level_access on the storage bucket. Enable access logging to a separate log-sink bucket."
+    }
+  ],
+  "priority_actions": [
+    {
+      "action_id": "ACT-001",
+      "title": "Harden all deployed workload securityContexts: allowPrivilegeEscalation=false, runAsNonRoot=true, seccompProfile=RuntimeDefault, drop ALL capabilities",
+      "rationale": "This single change addresses four concurrent critical/high Kyverno policy failures affecting 28+ workload locations in the live cluster: privilege escalation, run-as-root, missing seccomp, and excessive capabilities. These are confirmed active runtime violations, not future risks.",
+      "expected_risk_reduction": "Eliminates the active privilege escalation, run-as-root, missing seccomp, and excessive capabilities runtime violations. Significantly reduces container escape blast radius.",
+      "dependencies": [],
+      "estimated_complexity": "MEDIUM",
+      "supporting_evidence": [
+        "73e307bc47c2",
+        "f913039e3a2a",
+        "79abedf3ae77",
+        "55a0910c0cd3",
+        "b5041d14c6bd",
+        "1a438da1f2bb",
+        "448a793445e1",
+        "e9fffb850fa8"
+      ]
+    },
+    {
+      "action_id": "ACT-002",
+      "title": "Replace project-level Owner IAM role with least-privilege role and enable GKE Workload Identity",
+      "rationale": "The combination of project-level Owner IAM on the Compute Engine SA and disabled Workload Identity means any pod compromise yields full GCP project control. This is the highest-impact infrastructure finding and directly amplifies the blast radius of every other runtime finding.",
+      "expected_risk_reduction": "Eliminates the pod-to-project-owner privilege escalation path. Scopes GCP access to per-workload identities, containing the blast radius of any future pod compromise.",
+      "dependencies": [],
+      "estimated_complexity": "MEDIUM",
+      "supporting_evidence": [
+        "0487801b1fb6",
+        "54c214b711d1",
+        "f1f751c2ee51"
+      ]
+    },
+    {
+      "action_id": "ACT-003",
+      "title": "Investigate MANIFEST_UNKNOWN for release images; enforce cosign signing and enable Binary Authorization",
+      "rationale": "Supply chain verification failed for both components at the release commit SHA. It is unclear whether any signed image exists for this release. Binary Authorization is absent as an admission gate. Until image provenance is confirmed, the integrity of the running workloads is unverifiable.",
+      "expected_risk_reduction": "Confirms or establishes that running images correspond to known-good CI builds. Binary Authorization prevents unsigned or unverified images from being deployed in future releases.",
+      "dependencies": [],
+      "estimated_complexity": "MEDIUM",
+      "supporting_evidence": [
+        "3f6606939177",
+        "f84f2db980d4",
+        "6cb8ab1f3f5f"
+      ]
+    },
+    {
+      "action_id": "ACT-004",
+      "title": "Restrict all GCP firewall rules from 0.0.0.0/0 to specific CIDRs; remove SSH/RDP/MySQL/FTP public exposure",
+      "rationale": "The google_compute_firewall.allow_all rule exposes SSH, RDP, MySQL, FTP, and HTTP to the entire internet. This is a critical and high-severity direct network attack surface on the compute layer.",
+      "expected_risk_reduction": "Eliminates direct internet exposure of administrative and database ports, substantially reducing the probability of node-level compromise via network-based attacks.",
+      "dependencies": [],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "57df84a4027d",
+        "dbbdc1cf61c2",
+        "3ba928b4fd97",
+        "382c6fe86e55",
+        "e5f32d7b4723",
+        "be6a83a66fe7"
+      ]
+    },
+    {
+      "action_id": "ACT-005",
+      "title": "Unblock and run all SKIPPED application security scans (CodeQL, SonarCloud, GitGuardian, Snyk SCA) for backend and frontend",
+      "rationale": "All four application-layer scanners returned SKIPPED for both components this cycle. The application code and its dependencies have no security signal for this release. This is a complete blind spot that must be resolved before production deployment.",
+      "expected_risk_reduction": "Fills the entire application security domain gap. Provides static analysis, secrets detection, and dependency vulnerability signal that is currently absent.",
+      "dependencies": [],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "73e307bc47c2",
+        "f913039e3a2a"
+      ]
+    },
+    {
+      "action_id": "ACT-006",
+      "title": "Enable Stackdriver Logging and Monitoring on the GKE cluster",
+      "rationale": "Cluster logging and monitoring are both disabled. Combined with open firewall rules, any network-level compromise of the cluster would generate no audit trail.",
+      "expected_risk_reduction": "Enables detection and forensic investigation of intrusions. Restores auditability of cluster activity.",
+      "dependencies": [],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "5ecd8d3a4ddb",
+        "d8a03f87214b"
+      ]
+    },
+    {
+      "action_id": "ACT-007",
+      "title": "Disable legacy ABAC and client certificate authentication on GKE cluster; configure Google Groups RBAC",
+      "rationale": "Legacy authentication mechanisms present alternative access paths that bypass modern RBAC controls and are difficult to audit. Disabling them alongside configuring Google Groups RBAC centralizes and strengthens access control.",
+      "expected_risk_reduction": "Removes deprecated authentication attack surface; centralizes cluster access review.",
+      "dependencies": [
+        "ACT-002"
+      ],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "f35ff7111aaa",
+        "d4cac2b72249",
+        "f6e547c51ef0"
+      ]
+    },
+    {
+      "action_id": "ACT-008",
+      "title": "Enforce public access prevention and access logging on the Cloud Storage bucket",
+      "rationale": "The storage bucket lacks public access prevention and access logging, creating a risk of accidental data exposure with no audit trail.",
+      "expected_risk_reduction": "Eliminates risk of accidental public object exposure; enables access auditability for the bucket.",
+      "dependencies": [],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "189191849e41",
+        "724685b547f7",
+        "354070e54e2f"
+      ]
+    },
+    {
+      "action_id": "ACT-009",
+      "title": "Enable network hardening controls: master authorized networks, alias IP ranges, VPC flow logs, and network policy",
+      "rationale": "Multiple medium-severity findings indicate the GKE cluster's network attack surface is not minimized \u2014 no master authorized networks, no alias IPs, no VPC flow logs, and no pod-level network policy.",
+      "expected_risk_reduction": "Narrows the cluster network attack surface; improves lateral movement detection and prevention.",
+      "dependencies": [
+        "ACT-004"
+      ],
+      "estimated_complexity": "MEDIUM",
+      "supporting_evidence": [
+        "53953124a35c",
+        "0d8acda49a79",
+        "8d32bd1d8e72",
+        "7a97a533c5a2"
+      ]
+    },
+    {
+      "action_id": "ACT-010",
+      "title": "Add missing HTTP security response headers to the deployed application",
+      "rationale": "ZAP identified missing CSP, anti-clickjacking, COOP, COEP, CORP, Permissions-Policy, and X-Content-Type-Options headers on the live application, creating web application attack surface.",
+      "expected_risk_reduction": "Mitigates clickjacking, MIME-sniffing, cross-origin data leakage, and XSS attack vectors at the browser layer.",
+      "dependencies": [],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "7bee09ed010a",
+        "c2b6922903f8",
+        "759bc35cc9e9",
+        "87a7177a3187",
+        "5456ed675fa3",
+        "1d1396415f16",
+        "43184d5b328f"
+      ]
+    }
+  ],
+  "release_readiness": {
+    "recommendation": "DO_NOT_APPROVE",
+    "confidence": "HIGH",
+    "rationale": "This release cannot be approved for production deployment in its current state. The combination of confirmed active runtime violations (privilege escalation permitted across 28+ live workload locations), unverifiable image supply chain (MANIFEST_UNKNOWN for both components at the release commit), project-level Owner IAM with Workload Identity disabled (full GCP project takeover path from any pod compromise), internet-exposed administrative ports (SSH/RDP/MySQL/FTP to 0.0.0.0/0), and a complete absence of application security scanning signal represents a risk profile that is both severe and broad. These are not theoretical future risks \u2014 multiple findings are confirmed active states in the running cluster. No single compensating control is present in the data to offset any of these conditions.",
+    "blocking_evidence": [
+      "73e307bc47c2",
+      "f913039e3a2a",
+      "0487801b1fb6",
+      "54c214b711d1",
+      "f1f751c2ee51",
+      "3f6606939177",
+      "f84f2db980d4",
+      "57df84a4027d",
+      "dbbdc1cf61c2",
+      "3ba928b4fd97"
+    ],
+    "conditions": [
+      "All deployed workload securityContexts must set allowPrivilegeEscalation: false, resolving the active Kyverno privilege escalation violations (73e307bc47c2, f913039e3a2a)",
+      "Container image supply chain verification must succeed (not UNKNOWN) for both backend and frontend at the release commit \u2014 MANIFEST_UNKNOWN must be investigated and resolved (3f6606939177, f84f2db980d4)",
+      "Project-level Owner/basic IAM roles must be replaced with least-privilege roles, and GKE Workload Identity must be enabled (0487801b1fb6, 54c214b711d1, f1f751c2ee51)",
+      "All application-layer security scans (CodeQL, SonarCloud, GitGuardian, Snyk SCA) must complete and produce results for both backend and frontend components",
+      "Unrestricted firewall rules (SSH/RDP/MySQL/FTP/HTTP to 0.0.0.0/0) must be restricted to known CIDRs (57df84a4027d, dbbdc1cf61c2, 3ba928b4fd97)",
+      "Cluster logging and monitoring must be enabled so that runtime activity is auditable (5ecd8d3a4ddb, d8a03f87214b)"
+    ]
+  },
+  "assumptions_and_unknowns": [
+    {
+      "related_to": "scan_status.backend.codeql",
+      "impact_on_assessment": "All application security scans for backend are SKIPPED, not failed \u2014 meaning the pipeline chose not to run them, likely due to path trigger conditions. This creates a complete blind spot in the application_security domain: there is no static analysis, secrets, or SCA signal for backend code in this release. The report cannot assert the application layer is safe."
+    },
+    {
+      "related_to": "scan_status.frontend.codeql",
+      "impact_on_assessment": "All frontend application security scans are also SKIPPED. Combined with backend, the entire application security domain produced zero findings and zero clean signal for this release. The SBOM showing zero packages confirms no dependency analysis ran."
+    },
+    {
+      "related_to": "scan_status.deployed-app.kubearmor",
+      "impact_on_assessment": "KubeArmor status is NOT_CONFIGURED for deployed-app. This means there is no runtime behavioral enforcement or syscall-level visibility signal available to supplement Kyverno's policy findings. The actual runtime behavior of processes in deployed containers is unobserved beyond policy-level checks."
+    },
+    {
+      "related_to": "supply_chain.backend.verification_status",
+      "impact_on_assessment": "Backend image verification returned UNKNOWN due to MANIFEST_UNKNOWN \u2014 the image for the release commit SHA was not found in the registry. This means the supply chain integrity assessment for backend is not merely incomplete but actively unresolvable with current data. The backend component's deployed image cannot be traced to this release."
+    },
+    {
+      "related_to": "supply_chain.frontend.verification_status",
+      "impact_on_assessment": "Frontend image verification returned UNKNOWN for the same reason as backend. Both components have unverifiable supply chain provenance for this release commit, doubling the scope of the supply chain uncertainty and rendering the deployed-app runtime findings impossible to tie to a confirmed build artifact."
+    },
+    {
+      "related_to": "provenance.application_security.any_used_fallback_commit",
+      "impact_on_assessment": "All application security workflow runs used a fallback commit (921c68c411d0) rather than the release commit (93d9a5a4). Even if scans had not been SKIPPED, the scan results would reflect a different code state than what is being released. This means application security signal, even when present, is not guaranteed to be current for this exact release."
+    },
+    {
+      "related_to": "provenance.infrastructure_security.commits_behind",
+      "impact_on_assessment": "The commits_behind value is null \u2014 git history lookup was unavailable. The infrastructure security scan data is known to come from a different commit than the release (version_matches_application_security: false), but the magnitude of drift cannot be quantified. Infrastructure findings may not reflect Terraform or Helm changes made in the release commit delta."
+    },
+    {
+      "related_to": "signal_availability.reachability",
+      "impact_on_assessment": "Reachability, exploitability, business impact, and internet exposure are all not_collected. Prioritization in this report relies on severity, confidence, and domain alone. High-severity findings on non-internet-facing components cannot be distinguished from those on directly-exposed surfaces \u2014 this may cause over- or under-prioritization relative to actual business risk."
+    },
+    {
+      "related_to": "signal_availability.delta_status",
+      "impact_on_assessment": "Delta status is not collected \u2014 there is no signal indicating whether any finding is new in this release versus a pre-existing known issue. All findings are treated as current. If some findings are long-standing known issues with accepted risk, this report cannot reflect that context and may overstate urgency for those items."
+    },
+    {
+      "related_to": "sbom_summary.backend.total_packages",
+      "impact_on_assessment": "SBOM shows zero packages for both backend and frontend, confirming that dependency analysis did not run. There is no inventory of third-party packages in the application layer. Any vulnerable dependency is entirely unknown for this release."
+    }
+  ]
+}

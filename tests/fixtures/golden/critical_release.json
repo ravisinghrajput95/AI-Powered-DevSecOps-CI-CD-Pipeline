@@ -1,0 +1,257 @@
+{
+  "schema_version": "1.0.0",
+  "release": {
+    "version": "cccc3333cccc3333cccc3333cccc3333cccc3333",
+    "repository": "example-org/example-service",
+    "components": [
+      "deployed-app",
+      "terraform"
+    ],
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "provenance": {
+    "application_security": {
+      "source_version": "cccc3333cccc3333cccc3333cccc3333cccc3333",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "note": "golden fixture \u2014 synthetic provenance"
+    },
+    "infrastructure_security": {
+      "source_version": "cccc3333cccc3333cccc3333cccc3333cccc3333",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "version_matches_application_security": true,
+      "commits_behind": 0,
+      "commits_behind_note": "golden fixture"
+    },
+    "runtime_security": {
+      "zap": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kyverno": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kubearmor": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      }
+    }
+  },
+  "findings": [
+    {
+      "finding_id": "0487801b1fb6",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_117",
+      "severity": "critical",
+      "category": "excessive-iam-privilege",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Project-level Owner role granted to a service account",
+      "remediation_notes": [
+        "Fix: Project-level Owner role granted to a service account"
+      ],
+      "original_severity": "critical",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "57df84a4027d",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_3",
+      "severity": "critical",
+      "category": "open-firewall-rule",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Firewall rule allows unrestricted SSH from 0.0.0.0/0",
+      "remediation_notes": [
+        "Fix: Firewall rule allows unrestricted SSH from 0.0.0.0/0"
+      ],
+      "original_severity": "critical",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "43213a439b92",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "disallow-privilege-escalation",
+      "severity": "critical",
+      "category": "privilege-escalation",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Privilege escalation is enabled on 12 running pods",
+      "remediation_notes": [
+        "Fix: Privilege escalation is enabled on 12 running pods"
+      ],
+      "original_severity": "critical",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "16f9a8df84b3",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "require-run-as-nonroot",
+      "severity": "critical",
+      "category": "run-as-root",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Containers running as root on 12 pods",
+      "remediation_notes": [
+        "Fix: Containers running as root on 12 pods"
+      ],
+      "original_severity": "critical",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "f8b682d98c9f",
+      "component": "deployed-app",
+      "tool": "kubearmor",
+      "rule_id": "ksp-audit-sensitive-files",
+      "severity": "high",
+      "category": "unauthorized-file-access",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Process accessed /etc/shadow",
+      "remediation_notes": [
+        "Fix: Process accessed /etc/shadow"
+      ],
+      "original_severity": "high",
+      "domain": "runtime_security"
+    }
+  ],
+  "remediation_guide": {
+    "excessive-iam-privilege": "Replace the basic role (Owner/Editor/Viewer) or service-account-impersonation-capable role with the narrowest predefined or custom role that covers the actual required permissions \u2014 Owner on a Compute Engine default service account is effectively full project compromise if that SA's key or node is ever exposed.",
+    "open-firewall-rule": "Restrict the firewall rule's `source_ranges` to specific known CIDR blocks instead of 0.0.0.0/0, and scope `allow` blocks to only the ports actually required rather than a full port range.",
+    "privilege-escalation": "Set `allowPrivilegeEscalation: false` in the container's securityContext, so a process can't gain more privileges than its parent (e.g. via a setuid binary).",
+    "run-as-root": "Set `runAsNonRoot: true` (and a non-zero `runAsUser`) in the pod or container securityContext, so the process can't run as root even if the image itself doesn't define a non-root user.",
+    "unauthorized-file-access": "Review the matched policy's file rules \u2014 either add an allow rule for this legitimate access pattern, or treat it as a possible unauthorized access attempt if the path/process combination is unexpected."
+  },
+  "scan_status": {
+    "backend": {
+      "codeql": "SKIPPED",
+      "sonarcloud": "SKIPPED",
+      "gitguardian": "SKIPPED",
+      "snyk_sca": "SKIPPED"
+    },
+    "frontend": {
+      "codeql": "SKIPPED",
+      "sonarcloud": "SKIPPED",
+      "gitguardian": "SKIPPED",
+      "snyk_sca": "SKIPPED"
+    },
+    "deployed-app": {
+      "zap": "SUCCESS",
+      "kyverno": "SUCCESS",
+      "kubearmor": "SUCCESS"
+    },
+    "infrastructure": {
+      "kube-linter": "SUCCESS",
+      "kubeconform": "SUCCESS"
+    },
+    "terraform": {
+      "checkov": "SUCCESS",
+      "terraform-validate": "SUCCESS"
+    }
+  },
+  "release_statistics": {
+    "total_findings": 5,
+    "by_severity": {
+      "critical": 4,
+      "high": 1
+    },
+    "by_category": {
+      "excessive-iam-privilege": 1,
+      "open-firewall-rule": 1,
+      "privilege-escalation": 1,
+      "run-as-root": 1,
+      "unauthorized-file-access": 1
+    },
+    "by_component": {
+      "terraform": 2,
+      "deployed-app": 3
+    },
+    "by_domain": {
+      "infrastructure_security": 2,
+      "runtime_security": 3
+    }
+  },
+  "signal_availability": {
+    "severity": "available_per_finding",
+    "confidence": "available_per_finding",
+    "fix_availability": "available_per_finding_where_applicable",
+    "delta_status": "not_collected",
+    "reachability": "not_collected",
+    "exploitability": "not_collected",
+    "business_impact": "not_collected",
+    "internet_exposure": "not_collected"
+  },
+  "sbom_summary": {
+    "backend": {
+      "total_packages": 0
+    },
+    "frontend": {
+      "total_packages": 0
+    }
+  },
+  "dependency_summary": {},
+  "supply_chain": {
+    "backend": {
+      "image_signed": "unknown",
+      "signature_verified": false,
+      "verification_notes": "MANIFEST_UNKNOWN",
+      "verification_status": "UNKNOWN"
+    },
+    "frontend": {
+      "image_signed": "unknown",
+      "signature_verified": false,
+      "verification_notes": "MANIFEST_UNKNOWN",
+      "verification_status": "UNKNOWN"
+    }
+  },
+  "schema_validation": {
+    "valid": true,
+    "summary": {
+      "resources": [],
+      "summary": {
+        "valid": 1,
+        "invalid": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "terraform_validation": {
+    "valid": true,
+    "error_count": 0,
+    "summary": {
+      "format_version": "1.0",
+      "valid": true,
+      "error_count": 0,
+      "warning_count": 0,
+      "diagnostics": []
+    }
+  }
+}

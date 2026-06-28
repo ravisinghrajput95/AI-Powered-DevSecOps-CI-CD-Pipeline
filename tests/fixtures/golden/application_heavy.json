@@ -1,0 +1,363 @@
+{
+  "schema_version": "1.0.0",
+  "release": {
+    "version": "ffff6666ffff6666ffff6666ffff6666ffff6666",
+    "repository": "example-org/example-service",
+    "components": [
+      "backend",
+      "frontend"
+    ],
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "provenance": {
+    "application_security": {
+      "source_version": "ffff6666ffff6666ffff6666ffff6666ffff6666",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "note": "golden fixture \u2014 synthetic provenance"
+    },
+    "infrastructure_security": {
+      "source_version": "ffff6666ffff6666ffff6666ffff6666ffff6666",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "version_matches_application_security": true,
+      "commits_behind": 0,
+      "commits_behind_note": "golden fixture"
+    },
+    "runtime_security": {
+      "zap": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kyverno": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kubearmor": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      }
+    }
+  },
+  "findings": [
+    {
+      "finding_id": "8ed58c70a0ec",
+      "component": "backend",
+      "tool": "gitguardian",
+      "rule_id": "generic_high_entropy_secret",
+      "severity": "critical",
+      "category": "secret-exposure",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Confirmed live API key found in commit history",
+      "remediation_notes": [
+        "Fix: Confirmed live API key found in commit history"
+      ],
+      "original_severity": "valid",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "d16c1bbff022",
+      "component": "backend",
+      "tool": "sonarcloud",
+      "rule_id": "python:S6418",
+      "severity": "critical",
+      "category": "secret-exposure",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Hardcoded credential detected in source",
+      "remediation_notes": [
+        "Fix: Hardcoded credential detected in source"
+      ],
+      "original_severity": "blocker",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "90ae5ba4110c",
+      "component": "backend",
+      "tool": "snyk",
+      "rule_id": "SNYK-PYTHON-FLASK-9999",
+      "severity": "critical",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Flask has a known critical CVE",
+      "remediation_notes": [
+        "Fix: Flask has a known critical CVE"
+      ],
+      "package_name": "flask",
+      "package_version": "2.0.1",
+      "package_manager": "pip",
+      "original_severity": "critical",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "960395cfd351",
+      "component": "frontend",
+      "tool": "sonarcloud",
+      "rule_id": "javascript:S3776",
+      "severity": "high",
+      "category": "code-quality",
+      "type": "quality",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Function has excessive cognitive complexity",
+      "remediation_notes": [
+        "Fix: Function has excessive cognitive complexity"
+      ],
+      "original_severity": "high",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "25ed174a1d1c",
+      "component": "backend",
+      "tool": "codeql",
+      "rule_id": "py/sql-injection",
+      "severity": "high",
+      "category": "sql-injection",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "backend/routes/orders.py"
+      ],
+      "sample_message": "User input flows into a SQL query without sanitization",
+      "original_severity": "error",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "a21dde1a0c94",
+      "component": "backend",
+      "tool": "snyk",
+      "rule_id": "SNYK-PYTHON-FLASK-8888",
+      "severity": "high",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Flask has a second, separate known CVE at the same version",
+      "remediation_notes": [
+        "Fix: Flask has a second, separate known CVE at the same version"
+      ],
+      "package_name": "flask",
+      "package_version": "2.0.1",
+      "package_manager": "pip",
+      "original_severity": "high",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "a50a5daf8fa4",
+      "component": "frontend",
+      "tool": "snyk",
+      "rule_id": "SNYK-JS-AXIOS-7777",
+      "severity": "high",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "axios has a known high-severity CVE",
+      "remediation_notes": [
+        "Fix: axios has a known high-severity CVE"
+      ],
+      "package_name": "axios",
+      "package_version": "0.21.1",
+      "package_manager": "npm",
+      "original_severity": "high",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "f36b64dc1c97",
+      "component": "backend",
+      "tool": "codeql",
+      "rule_id": "py/unused-import",
+      "severity": "medium",
+      "category": "code-quality",
+      "type": "quality",
+      "confidence": "medium",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Unused import detected",
+      "remediation_notes": [
+        "Fix: Unused import detected"
+      ],
+      "original_severity": "warning",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "a32b432dfbad",
+      "component": "backend",
+      "tool": "sonarcloud",
+      "rule_id": "python:S1192",
+      "severity": "medium",
+      "category": "code-quality",
+      "type": "quality",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "String literal duplicated 5 times",
+      "remediation_notes": [
+        "Fix: String literal duplicated 5 times"
+      ],
+      "original_severity": "medium",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "13b966354937",
+      "component": "frontend",
+      "tool": "codeql",
+      "rule_id": "js/xss-through-dom",
+      "severity": "medium",
+      "category": "xss",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Potential DOM-based XSS via innerHTML",
+      "remediation_notes": [
+        "Fix: Potential DOM-based XSS via innerHTML"
+      ],
+      "original_severity": "warning",
+      "domain": "application_security"
+    }
+  ],
+  "remediation_guide": {
+    "sql-injection": "Fix: User input flows into a SQL query without sanitization",
+    "code-quality": "Review the flagged code for correctness; this is a maintainability/quality finding rather than a direct security vulnerability.",
+    "secret-exposure": "Remove the hardcoded credential from source control, rotate it at the provider, and load it from a secret manager or environment variable at runtime.",
+    "vulnerable-dependency": "Upgrade the affected package or base image to a patched version. If no fix is available yet, check whether the vulnerable code path is actually reachable in this image and document a time-boxed exception (e.g. a Snyk ignore policy) rather than leaving it unaddressed indefinitely.",
+    "xss": "Escape or sanitize user-supplied data before rendering it in HTML/JS output; use the framework's built-in templating auto-escaping."
+  },
+  "scan_status": {
+    "backend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "frontend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "deployed-app": {
+      "zap": "SUCCESS",
+      "kyverno": "SUCCESS",
+      "kubearmor": "SUCCESS"
+    },
+    "infrastructure": {
+      "kube-linter": "SUCCESS",
+      "kubeconform": "SUCCESS"
+    },
+    "terraform": {
+      "checkov": "SUCCESS",
+      "terraform-validate": "SUCCESS"
+    }
+  },
+  "release_statistics": {
+    "total_findings": 10,
+    "by_severity": {
+      "critical": 3,
+      "high": 4,
+      "medium": 3
+    },
+    "by_category": {
+      "secret-exposure": 2,
+      "vulnerable-dependency": 3,
+      "code-quality": 3,
+      "sql-injection": 1,
+      "xss": 1
+    },
+    "by_component": {
+      "backend": 7,
+      "frontend": 3
+    },
+    "by_domain": {
+      "application_security": 10
+    }
+  },
+  "signal_availability": {
+    "severity": "available_per_finding",
+    "confidence": "available_per_finding",
+    "fix_availability": "available_per_finding_where_applicable",
+    "delta_status": "not_collected",
+    "reachability": "not_collected",
+    "exploitability": "not_collected",
+    "business_impact": "not_collected",
+    "internet_exposure": "not_collected"
+  },
+  "sbom_summary": {
+    "backend": {
+      "total_packages": 0
+    },
+    "frontend": {
+      "total_packages": 0
+    }
+  },
+  "dependency_summary": {},
+  "supply_chain": {
+    "backend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    },
+    "frontend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    }
+  },
+  "schema_validation": {
+    "valid": true,
+    "summary": {
+      "resources": [],
+      "summary": {
+        "valid": 1,
+        "invalid": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "terraform_validation": {
+    "valid": true,
+    "error_count": 0,
+    "summary": {
+      "format_version": "1.0",
+      "valid": true,
+      "error_count": 0,
+      "warning_count": 0,
+      "diagnostics": []
+    }
+  }
+}

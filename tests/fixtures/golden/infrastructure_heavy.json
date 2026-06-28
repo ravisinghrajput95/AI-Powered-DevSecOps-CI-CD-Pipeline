@@ -1,0 +1,321 @@
+{
+  "schema_version": "1.0.0",
+  "release": {
+    "version": "dddd4444dddd4444dddd4444dddd4444dddd4444",
+    "repository": "example-org/example-service",
+    "components": [
+      "infrastructure",
+      "terraform"
+    ],
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "provenance": {
+    "application_security": {
+      "source_version": "dddd4444dddd4444dddd4444dddd4444dddd4444",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "note": "golden fixture \u2014 synthetic provenance"
+    },
+    "infrastructure_security": {
+      "source_version": "dddd4444dddd4444dddd4444dddd4444dddd4444",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "version_matches_application_security": true,
+      "commits_behind": 0,
+      "commits_behind_note": "golden fixture"
+    },
+    "runtime_security": {
+      "zap": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kyverno": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kubearmor": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      }
+    }
+  },
+  "findings": [
+    {
+      "finding_id": "0487801b1fb6",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_117",
+      "severity": "critical",
+      "category": "excessive-iam-privilege",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Project Owner role granted",
+      "remediation_notes": [
+        "Fix: Project Owner role granted"
+      ],
+      "original_severity": "critical",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "57df84a4027d",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_3",
+      "severity": "high",
+      "category": "open-firewall-rule",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Firewall allows unrestricted SSH",
+      "remediation_notes": [
+        "Fix: Firewall allows unrestricted SSH"
+      ],
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "f1f751c2ee51",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_69",
+      "severity": "high",
+      "category": "workload-identity-disabled",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Workload Identity disabled on GKE cluster",
+      "remediation_notes": [
+        "Fix: Workload Identity disabled on GKE cluster"
+      ],
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "bac0bcec3a3d",
+      "component": "infrastructure",
+      "tool": "kube-linter",
+      "rule_id": "no-readiness-probe",
+      "severity": "low",
+      "category": "missing-readiness-probe",
+      "type": "quality",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Container has no readiness probe",
+      "original_severity": "low",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "8778bf9422f1",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_24",
+      "severity": "low",
+      "category": "node-pool-maintenance",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Node pool auto-upgrade disabled",
+      "remediation_notes": [
+        "Fix: Node pool auto-upgrade disabled"
+      ],
+      "original_severity": "low",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "6cb8ab1f3f5f",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_66",
+      "severity": "medium",
+      "category": "missing-binary-authorization",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Binary Authorization not enabled",
+      "remediation_notes": [
+        "Fix: Binary Authorization not enabled"
+      ],
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "538a285dee01",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_78",
+      "severity": "medium",
+      "category": "missing-bucket-versioning",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Storage bucket versioning disabled",
+      "remediation_notes": [
+        "Fix: Storage bucket versioning disabled"
+      ],
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "30cd9e3b1db3",
+      "component": "infrastructure",
+      "tool": "kube-linter",
+      "rule_id": "no-resource-limits",
+      "severity": "medium",
+      "category": "missing-resource-limits",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Deployment has no resource limits",
+      "remediation_notes": [
+        "Fix: Deployment has no resource limits"
+      ],
+      "original_severity": "medium",
+      "domain": "infrastructure_security"
+    }
+  ],
+  "remediation_guide": {
+    "excessive-iam-privilege": "Replace the basic role (Owner/Editor/Viewer) or service-account-impersonation-capable role with the narrowest predefined or custom role that covers the actual required permissions \u2014 Owner on a Compute Engine default service account is effectively full project compromise if that SA's key or node is ever exposed.",
+    "workload-identity-disabled": "Set `workload_metadata_config.mode = \"GKE_METADATA\"` on the node pool and enable `workload_identity_config` on the cluster, so pods can use scoped per-workload IAM identities instead of inheriting the node's Compute Engine service account.",
+    "open-firewall-rule": "Restrict the firewall rule's `source_ranges` to specific known CIDR blocks instead of 0.0.0.0/0, and scope `allow` blocks to only the ports actually required rather than a full port range.",
+    "missing-bucket-versioning": "Enable object versioning on the bucket so an accidental overwrite or delete can be recovered rather than being permanent.",
+    "missing-binary-authorization": "Enable Binary Authorization on the cluster so only signed, attested container images can be deployed.",
+    "node-pool-maintenance": "Enable `management.auto_repair` and `management.auto_upgrade` on the node pool so unhealthy or outdated nodes are remediated automatically instead of silently drifting.",
+    "missing-resource-limits": "Set explicit CPU/memory `requests` and `limits` on every container. Without limits, a single misbehaving pod can exhaust node resources and affect other workloads.",
+    "missing-readiness-probe": "Fix: Container has no readiness probe"
+  },
+  "scan_status": {
+    "backend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "frontend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "deployed-app": {
+      "zap": "SUCCESS",
+      "kyverno": "SUCCESS",
+      "kubearmor": "SUCCESS"
+    },
+    "infrastructure": {
+      "kube-linter": "SUCCESS",
+      "kubeconform": "SUCCESS"
+    },
+    "terraform": {
+      "checkov": "SUCCESS",
+      "terraform-validate": "SUCCESS"
+    }
+  },
+  "release_statistics": {
+    "total_findings": 8,
+    "by_severity": {
+      "critical": 1,
+      "high": 2,
+      "low": 2,
+      "medium": 3
+    },
+    "by_category": {
+      "excessive-iam-privilege": 1,
+      "open-firewall-rule": 1,
+      "workload-identity-disabled": 1,
+      "missing-readiness-probe": 1,
+      "node-pool-maintenance": 1,
+      "missing-binary-authorization": 1,
+      "missing-bucket-versioning": 1,
+      "missing-resource-limits": 1
+    },
+    "by_component": {
+      "terraform": 6,
+      "infrastructure": 2
+    },
+    "by_domain": {
+      "infrastructure_security": 8
+    }
+  },
+  "signal_availability": {
+    "severity": "available_per_finding",
+    "confidence": "available_per_finding",
+    "fix_availability": "available_per_finding_where_applicable",
+    "delta_status": "not_collected",
+    "reachability": "not_collected",
+    "exploitability": "not_collected",
+    "business_impact": "not_collected",
+    "internet_exposure": "not_collected"
+  },
+  "sbom_summary": {
+    "backend": {
+      "total_packages": 0
+    },
+    "frontend": {
+      "total_packages": 0
+    }
+  },
+  "dependency_summary": {},
+  "supply_chain": {
+    "backend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    },
+    "frontend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    }
+  },
+  "schema_validation": {
+    "valid": true,
+    "summary": {
+      "resources": [],
+      "summary": {
+        "valid": 1,
+        "invalid": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "terraform_validation": {
+    "valid": true,
+    "error_count": 0,
+    "summary": {
+      "format_version": "1.0",
+      "valid": true,
+      "error_count": 0,
+      "warning_count": 0,
+      "diagnostics": []
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "4efef7a2f274d2a3",
+  "generated_at": "2026-01-01T00:00:00+00:00",
+  "release_context_ref": {
+    "repository": "example-org/example-service",
+    "version": "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111",
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "executive_summary": {
+    "overall_health": "LOW",
+    "deployment_confidence": "HIGH",
+    "dominant_risk_themes": [
+      "Minor missing annotation"
+    ],
+    "narrative": "This release has one informational finding and no security-relevant issues. All scans succeeded with no high or critical findings."
+  },
+  "cross_domain_correlations": [],
+  "top_risks": [],
+  "priority_actions": [],
+  "release_readiness": {
+    "recommendation": "APPROVE",
+    "confidence": "HIGH",
+    "rationale": "No security findings of any severity. All scans completed successfully across every domain.",
+    "blocking_evidence": [],
+    "conditions": null
+  },
+  "assumptions_and_unknowns": []
+}

@@ -254,6 +254,7 @@ TOC_ITEMS = [
     ("priority-actions", "Priority Actions"),
     ("release-readiness", "Release Readiness"),
     ("assumptions", "Assumptions & Unknowns"),
+    ("final-recommendation", "Final Recommendation"),
 ]
 
 
@@ -402,6 +403,19 @@ a:focus-visible, summary:focus-visible, button:focus-visible {
 .conditions { margin: 12px 0; font-size: 0.95rem; }
 .conditions ul { margin: 8px 0 0; padding-left: 20px; }
 
+/* Closing recommendation recap */
+.closing-rec { border-radius: var(--radius); padding: 24px; border: 2px solid; }
+.closing-rec-label { font-family: 'Fraunces', serif; font-size: 1.3rem; font-weight: 600; display: block; margin-bottom: 8px; }
+.closing-rec p { margin: 0; color: var(--text-muted); }
+.closing-rec--approve { border-color: #6FCF97; background: #F0FAF4; }
+.closing-rec--approve .closing-rec-label { color: #237042; }
+.closing-rec--approve_with_conditions { border-color: #F2C94C; background: #FDF8EC; }
+.closing-rec--approve_with_conditions .closing-rec-label { color: #8A6A06; }
+.closing-rec--manual_review_required { border-color: #56CCF2; background: #EEFAFD; }
+.closing-rec--manual_review_required .closing-rec-label { color: #1A6E8A; }
+.closing-rec--do_not_approve { border-color: #EB5757; background: #FDEEEE; }
+.closing-rec--do_not_approve .closing-rec-label { color: var(--sev-critical); }
+
 @media (max-width: 800px) {
   .layout { grid-template-columns: 1fr; }
   .toc { position: static; border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 8px; }
@@ -411,6 +425,24 @@ a:focus-visible, summary:focus-visible, button:focus-visible {
   .assumption-row { grid-template-columns: 1fr; gap: 4px; }
 }
 """
+
+
+def render_closing_recommendation(rr):
+    """A closing recap of the verdict, mirroring the Markdown renderer's
+    structure — added after noticing a real UX gap: on a long document
+    (16,000+ px in a real run), the recommendation only appearing once in
+    the top banner means a reader who scrolls through everything has lost
+    sight of it by the time they reach Assumptions. Simpler fix than a
+    sticky/shrinking header (which would need JS to do well) — just state
+    it again, clearly, at the end."""
+    return f"""
+<section id="final-recommendation" class="block">
+  <h2>Final Recommendation</h2>
+  <div class="closing-rec closing-rec--{esc(rr['recommendation'].lower())}">
+    <span class="closing-rec-label">{esc(RECOMMENDATION_LABELS[rr['recommendation']])}</span>
+    <p>{esc(rr['rationale'])}</p>
+  </div>
+</section>"""
 
 
 def render_html(report, release_context):
@@ -429,6 +461,7 @@ def render_html(report, release_context):
         render_priority_actions(report["priority_actions"], finding_lookup),
         render_release_readiness(report["release_readiness"], finding_lookup),
         render_assumptions(report["assumptions_and_unknowns"], release_context),
+        render_closing_recommendation(report["release_readiness"]),
         '</main>',
         '</div>',
     ])
@@ -463,7 +496,13 @@ def main():
     with open(args.output, "w") as f:
         f.write(html_doc)
 
-    unresolved = html_doc.count("chip--unresolved")
+    # "⚠ unresolved" (not "chip--unresolved") — the class name also
+    # appears once in the CSS definition itself regardless of whether any
+    # real unresolved chip exists, which was producing a false-positive
+    # warning on every single render. Confirmed by checking a real run's
+    # output directly: count("chip--unresolved") == 1 even with zero
+    # actual unresolved references present.
+    unresolved = html_doc.count("⚠ unresolved")
     print(f"Rendered {args.executive_report} -> {args.output} ({len(html_doc)} chars)")
     if unresolved:
         print(

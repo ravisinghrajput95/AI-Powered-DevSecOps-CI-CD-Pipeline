@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "773fb324964712de",
+  "generated_at": "2026-01-01T00:00:00+00:00",
+  "release_context_ref": {
+    "repository": "example-org/example-service",
+    "version": "1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa",
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "executive_summary": {
+    "overall_health": "HIGH",
+    "deployment_confidence": "MEDIUM",
+    "dominant_risk_themes": [
+      "Outdated base image packages",
+      "Critical OS-layer CVEs"
+    ],
+    "narrative": "Both backend and frontend container images carry critical and high-severity CVEs in their base-image OS packages (OpenSSL, Node.js runtime, zlib). These are container-layer findings, distinct from application dependency findings."
+  },
+  "cross_domain_correlations": [],
+  "top_risks": [
+    {
+      "risk_id": "risk-1",
+      "title": "Critical OpenSSL CVE in backend base image",
+      "impact": "A critical, widely-exploited class of vulnerability in the TLS library.",
+      "why_it_matters": "OpenSSL CVEs are frequently weaponized quickly after disclosure.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "3e4f1bdcc5bd"
+      ],
+      "recommended_action": "Rebuild on an updated base image."
+    },
+    {
+      "risk_id": "risk-2",
+      "title": "Critical Node.js runtime CVE in frontend base image",
+      "impact": "Critical CVE in the JS runtime itself, not application code.",
+      "why_it_matters": "Affects the entire frontend container regardless of application-level fixes.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "8de70bc6a7d4"
+      ],
+      "recommended_action": "Rebuild on an updated Node base image."
+    }
+  ],
+  "priority_actions": [
+    {
+      "action_id": "action-1",
+      "title": "Rebuild both images on current base-image tags",
+      "rationale": "Both critical findings and most of the high findings are resolved by a base-image bump, not application code changes.",
+      "expected_risk_reduction": "Resolves all 5 container-layer CVEs in one CI change.",
+      "dependencies": [],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "3e4f1bdcc5bd",
+        "8de70bc6a7d4"
+      ]
+    }
+  ],
+  "release_readiness": {
+    "recommendation": "MANUAL_REVIEW_REQUIRED",
+    "confidence": "MEDIUM",
+    "rationale": "Critical container-layer CVEs exist, but the fix (a base-image rebuild) is low-complexity and well-understood \u2014 a human should confirm whether to block on this or fast-track the rebuild.",
+    "blocking_evidence": [
+      "3e4f1bdcc5bd",
+      "8de70bc6a7d4"
+    ],
+    "conditions": null
+  },
+  "assumptions_and_unknowns": []
+}

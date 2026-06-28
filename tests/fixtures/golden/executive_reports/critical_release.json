@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "df2dcc1ca291b1ea",
+  "generated_at": "2026-01-01T00:00:00+00:00",
+  "release_context_ref": {
+    "repository": "example-org/example-service",
+    "version": "cccc3333cccc3333cccc3333cccc3333cccc3333",
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "executive_summary": {
+    "overall_health": "CRITICAL",
+    "deployment_confidence": "LOW",
+    "dominant_risk_themes": [
+      "Excessive IAM privilege",
+      "Live privilege escalation"
+    ],
+    "narrative": "This release combines project-level IAM over-privilege with confirmed live privilege-escalation and root execution on running pods. The combination represents a direct path from container compromise to broad GCP access."
+  },
+  "cross_domain_correlations": [
+    {
+      "correlation_id": "corr-1",
+      "title": "Excessive IAM Privilege Compounds Live Privilege Escalation",
+      "description": "A project-level Owner role is granted to a service account that backs workloads where privilege escalation and root execution are both confirmed enabled live.",
+      "business_impact": "A compromised container can escalate to full project access with no additional barrier.",
+      "confidence": "HIGH",
+      "affected_domains": [
+        "infrastructure_security",
+        "runtime_security"
+      ],
+      "supporting_evidence": [
+        "0487801b1fb6",
+        "43213a439b92",
+        "16f9a8df84b3"
+      ],
+      "recommended_action": "Remove the Owner role and harden pod securityContexts together \u2014 fixing either alone leaves the other half of the path intact."
+    }
+  ],
+  "top_risks": [
+    {
+      "risk_id": "risk-1",
+      "title": "Live privilege escalation and root execution",
+      "impact": "Confirmed by Kyverno on running pods, not a hypothetical misconfiguration.",
+      "why_it_matters": "This is the most direct path to container breakout.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "43213a439b92",
+        "16f9a8df84b3"
+      ],
+      "recommended_action": "Set allowPrivilegeEscalation: false and runAsNonRoot: true across all workloads."
+    }
+  ],
+  "priority_actions": [
+    {
+      "action_id": "action-1",
+      "title": "Harden pod securityContexts",
+      "rationale": "Resolves both live Kyverno violations in one Helm values change.",
+      "expected_risk_reduction": "Eliminates the confirmed privilege-escalation and root-execution path.",
+      "dependencies": [],
+      "estimated_complexity": "MEDIUM",
+      "supporting_evidence": [
+        "43213a439b92",
+        "16f9a8df84b3"
+      ]
+    }
+  ],
+  "release_readiness": {
+    "recommendation": "DO_NOT_APPROVE",
+    "confidence": "HIGH",
+    "rationale": "Multiple critical, live, high-confidence findings with a confirmed compounding path between infrastructure IAM and runtime privilege escalation.",
+    "blocking_evidence": [
+      "0487801b1fb6",
+      "57df84a4027d",
+      "43213a439b92",
+      "16f9a8df84b3"
+    ],
+    "conditions": null
+  },
+  "assumptions_and_unknowns": [
+    {
+      "related_to": "scan_status.backend.codeql",
+      "impact_on_assessment": "Application-layer scanning was skipped; code-level risk is entirely unassessed for this release."
+    }
+  ]
+}

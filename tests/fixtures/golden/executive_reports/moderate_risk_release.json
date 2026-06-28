@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "cae0601766d57f1e",
+  "generated_at": "2026-01-01T00:00:00+00:00",
+  "release_context_ref": {
+    "repository": "example-org/example-service",
+    "version": "bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222",
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "executive_summary": {
+    "overall_health": "MEDIUM",
+    "deployment_confidence": "MEDIUM",
+    "dominant_risk_themes": [
+      "Missing security headers",
+      "Outdated dependency"
+    ],
+    "narrative": "This release has a handful of medium and low severity findings spanning application, infrastructure, and runtime domains. None are critical or high severity."
+  },
+  "cross_domain_correlations": [],
+  "top_risks": [
+    {
+      "risk_id": "risk-1",
+      "title": "Outdated requests library",
+      "impact": "Known moderate-severity CVE in a core HTTP library.",
+      "why_it_matters": "Affects every outbound request the backend makes.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "c901f3f49ece"
+      ],
+      "recommended_action": "Upgrade requests to the patched version."
+    }
+  ],
+  "priority_actions": [
+    {
+      "action_id": "action-1",
+      "title": "Set Content-Security-Policy and Cache-Control headers",
+      "rationale": "Two related ZAP findings resolved by the same reverse-proxy config change.",
+      "expected_risk_reduction": "Removes the missing-header findings entirely.",
+      "dependencies": [],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "4009060fb6d5",
+        "8abe2ddb9d74"
+      ]
+    }
+  ],
+  "release_readiness": {
+    "recommendation": "APPROVE_WITH_CONDITIONS",
+    "confidence": "MEDIUM",
+    "rationale": "No high or critical findings, but several medium/low issues should be addressed before or shortly after deployment.",
+    "blocking_evidence": [],
+    "conditions": [
+      "Upgrade requests past the known CVE",
+      "Add the missing security headers"
+    ]
+  },
+  "assumptions_and_unknowns": [
+    {
+      "related_to": "signal_availability.reachability",
+      "impact_on_assessment": "Reachability is not collected; prioritization relies on severity and confidence alone."
+    }
+  ]
+}

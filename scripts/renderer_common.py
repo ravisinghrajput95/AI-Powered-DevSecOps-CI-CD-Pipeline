@@ -32,12 +32,23 @@ import sys
 
 try:
     import jsonschema
-except ImportError:
-    print(
-        "FATAL: the 'jsonschema' package is required (pip install jsonschema).",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+except ImportError as e:
+    # raise, not print+sys.exit() — this module gets IMPORTED (by both
+    # renderers AND the test suite), not just run standalone. SystemExit
+    # during import isn't a normal, catchable error to whatever's doing
+    # the importing — confirmed via a real incident: it crashed pytest's
+    # entire collection process with an INTERNALERROR ("collected 0
+    # items"), instead of a clean per-file collection error that would
+    # still let every other test file run. A raised ImportError behaves
+    # correctly in both contexts: pytest reports it as a normal collection
+    # error for just the affected files; a standalone script run still
+    # prints a clear traceback and exits non-zero, same practical effect
+    # as before.
+    raise ImportError(
+        "the 'jsonschema' package is required (pip install jsonschema). "
+        "Hand-rolling JSON Schema validation would reinvent a well-solved "
+        "problem poorly — this is a deliberate dependency, not an oversight."
+    ) from e
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from executive_report_schema import SCHEMA

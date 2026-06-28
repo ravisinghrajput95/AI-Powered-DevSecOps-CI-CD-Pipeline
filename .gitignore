@@ -88,3 +88,96 @@ gitguardian-findings.json
 codeql-*-report.csv
 normalized-*.json
 security-findings-*.json
+
+
+Gitignore updated · TXT
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/venv/
+frontend/node_modules/
+pip-wheel-metadata/
+ 
+# Build
+dist/
+build/
+*.egg-info/
+ 
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+ 
+# Local databases / runtime state
+*.db
+*.sqlite
+*.sqlite3
+instance/
+ 
+# Uploads (runtime)
+backend/uploads/*
+!backend/uploads/.gitkeep
+ 
+# Generated scratch assets
+scripts/tmp_product_images/
+ 
+# IDE
+.idea/
+.vscode/
+*.swp
+ 
+# OS
+.DS_Store
+Thumbs.db
+ 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+*.tfplan
+crash.log
+crash.*.log
+ 
+# Secrets (intentionally not ignored in repo for gitleaks demo - see secrets files)
+# credentials.json
+ 
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+ 
+# Coverage
+coverage/
+htmlcov/
+.coverage
+coverage.xml
+ 
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+ 
+# Kubernetes secrets at runtime
+kubeconfig
+kubeconfig.*
+ 
+# Added by ggshield
+.cache_ggshield
+ 
+# Security scan workflow outputs - generated transiently in CI,
+# never meant to be committed. Committing these creates a feedback
+# loop where ggshield flags its own previous report as a secret.
+gitguardian-findings.json
+*.sarif
+codeql-*-report.csv
+normalized-*.json
+security-findings-*.json
