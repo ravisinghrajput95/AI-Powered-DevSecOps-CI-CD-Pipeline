@@ -1,0 +1,105 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "4ccd4a465ad9c54b",
+  "generated_at": "2026-01-01T00:00:00+00:00",
+  "release_context_ref": {
+    "repository": "example-org/example-service",
+    "version": "2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb",
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "executive_summary": {
+    "overall_health": "CRITICAL",
+    "deployment_confidence": "LOW",
+    "dominant_risk_themes": [
+      "Workload Identity disabled with excessive IAM",
+      "Cryptography library CVEs"
+    ],
+    "narrative": "This release shows a confirmed cross-domain path from disabled Workload Identity and excessive project IAM through to live runtime token access, plus a separate, unrelated pair of CVEs in the same pinned cryptography package."
+  },
+  "cross_domain_correlations": [
+    {
+      "correlation_id": "corr-1",
+      "title": "Workload Identity Disabled + Excessive IAM + Live Token Access",
+      "description": "Workload Identity is disabled (infrastructure) and a project-level Owner role is granted (infrastructure) to the service account those nodes inherit. KubeArmor independently confirms, at runtime, a pod actually accessing the GCP metadata server's service-account token endpoint.",
+      "business_impact": "A compromised pod can obtain a token with project-level access via the metadata server \u2014 confirmed reachable, not theoretical.",
+      "confidence": "HIGH",
+      "affected_domains": [
+        "infrastructure_security",
+        "runtime_security"
+      ],
+      "supporting_evidence": [
+        "f1f751c2ee51",
+        "0487801b1fb6",
+        "9b21cc78c52e"
+      ],
+      "recommended_action": "Enable Workload Identity and remove the Owner role together \u2014 the runtime finding confirms this path is real, not hypothetical."
+    },
+    {
+      "correlation_id": "corr-2",
+      "title": "Cryptography Package \u2014 Two CVEs, One Upgrade",
+      "description": "The same pinned cryptography package version has two independently-disclosed CVEs reported separately by Snyk.",
+      "business_impact": "Both vulnerabilities are present simultaneously in every backend instance running this pinned version.",
+      "confidence": "HIGH",
+      "affected_domains": [
+        "application_security"
+      ],
+      "supporting_evidence": [
+        "e56d59eca03b",
+        "db5d25cb9447"
+      ],
+      "recommended_action": "Upgrade cryptography past both CVEs in a single dependency bump."
+    }
+  ],
+  "top_risks": [
+    {
+      "risk_id": "risk-1",
+      "title": "Confirmed path from disabled Workload Identity to live metadata-server token access",
+      "impact": "Live, confirmed runtime evidence of an infrastructure misconfiguration being actively reachable.",
+      "why_it_matters": "This is not a static finding \u2014 KubeArmor saw it happen.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "f1f751c2ee51",
+        "9b21cc78c52e"
+      ],
+      "recommended_action": "See corr-1."
+    }
+  ],
+  "priority_actions": [
+    {
+      "action_id": "action-1",
+      "title": "Enable Workload Identity and scope IAM together",
+      "rationale": "Addresses the highest-confidence finding in this release.",
+      "expected_risk_reduction": "Closes the confirmed token-access path.",
+      "dependencies": [],
+      "estimated_complexity": "MEDIUM",
+      "supporting_evidence": [
+        "f1f751c2ee51",
+        "0487801b1fb6"
+      ]
+    },
+    {
+      "action_id": "action-2",
+      "title": "Upgrade cryptography",
+      "rationale": "One dependency bump resolves two CVEs.",
+      "expected_risk_reduction": "Removes both cryptography CVEs.",
+      "dependencies": [],
+      "estimated_complexity": "LOW",
+      "supporting_evidence": [
+        "e56d59eca03b",
+        "db5d25cb9447"
+      ]
+    }
+  ],
+  "release_readiness": {
+    "recommendation": "DO_NOT_APPROVE",
+    "confidence": "HIGH",
+    "rationale": "A confirmed, live cross-domain privilege-escalation path is independently sufficient to block this release.",
+    "blocking_evidence": [
+      "f1f751c2ee51",
+      "0487801b1fb6",
+      "9b21cc78c52e"
+    ],
+    "conditions": null
+  },
+  "assumptions_and_unknowns": []
+}

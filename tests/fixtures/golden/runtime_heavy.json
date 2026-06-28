@@ -1,0 +1,344 @@
+{
+  "schema_version": "1.0.0",
+  "release": {
+    "version": "eeee5555eeee5555eeee5555eeee5555eeee5555",
+    "repository": "example-org/example-service",
+    "components": [
+      "deployed-app"
+    ],
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "provenance": {
+    "application_security": {
+      "source_version": "eeee5555eeee5555eeee5555eeee5555eeee5555",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "note": "golden fixture \u2014 synthetic provenance"
+    },
+    "infrastructure_security": {
+      "source_version": "eeee5555eeee5555eeee5555eeee5555eeee5555",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "version_matches_application_security": true,
+      "commits_behind": 0,
+      "commits_behind_note": "golden fixture"
+    },
+    "runtime_security": {
+      "zap": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kyverno": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kubearmor": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      }
+    }
+  },
+  "findings": [
+    {
+      "finding_id": "43213a439b92",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "disallow-privilege-escalation",
+      "severity": "critical",
+      "category": "privilege-escalation",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Privilege escalation enabled across 18 pods",
+      "remediation_notes": [
+        "Fix: Privilege escalation enabled across 18 pods"
+      ],
+      "original_severity": "critical",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "16f9a8df84b3",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "require-run-as-nonroot",
+      "severity": "critical",
+      "category": "run-as-root",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Containers running as root across 18 pods",
+      "remediation_notes": [
+        "Fix: Containers running as root across 18 pods"
+      ],
+      "original_severity": "critical",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "07c3e8a9e18a",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "disallow-capabilities-strict",
+      "severity": "high",
+      "category": "excessive-capabilities",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Linux capabilities not dropped",
+      "remediation_notes": [
+        "Fix: Linux capabilities not dropped"
+      ],
+      "original_severity": "high",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "8b9492be7c39",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "restrict-seccomp-strict",
+      "severity": "high",
+      "category": "missing-seccomp-profile",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "No seccomp profile set",
+      "remediation_notes": [
+        "Fix: No seccomp profile set"
+      ],
+      "original_severity": "high",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "050dd94e2d97",
+      "component": "deployed-app",
+      "tool": "kubearmor",
+      "rule_id": "ksp-block-shell-exec",
+      "severity": "high",
+      "category": "unauthorized-process-execution",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Shell execution detected in backend container",
+      "remediation_notes": [
+        "Fix: Shell execution detected in backend container"
+      ],
+      "original_severity": "high",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "004fa45af8b8",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "10037",
+      "severity": "low",
+      "category": "info-disclosure",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Server version header disclosed",
+      "remediation_notes": [
+        "Fix: Server version header disclosed"
+      ],
+      "original_severity": "low",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "4009060fb6d5",
+      "component": "deployed-app",
+      "tool": "zap",
+      "rule_id": "10038",
+      "severity": "medium",
+      "category": "missing-security-headers",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "CSP header missing",
+      "remediation_notes": [
+        "Fix: CSP header missing"
+      ],
+      "original_severity": "medium",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "5c7b84ed9ea7",
+      "component": "deployed-app",
+      "tool": "kubearmor",
+      "rule_id": "ksp-audit-icmp",
+      "severity": "medium",
+      "category": "unauthorized-network-activity",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Unexpected ICMP traffic from pod",
+      "remediation_notes": [
+        "Fix: Unexpected ICMP traffic from pod"
+      ],
+      "original_severity": "medium",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "61be7a3479cb",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "verify-image-cosign",
+      "severity": "medium",
+      "category": "unsigned-container-image",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Image signature could not be verified",
+      "remediation_notes": [
+        "Fix: Image signature could not be verified"
+      ],
+      "original_severity": "medium",
+      "domain": "runtime_security"
+    }
+  ],
+  "remediation_guide": {
+    "privilege-escalation": "Set `allowPrivilegeEscalation: false` in the container's securityContext, so a process can't gain more privileges than its parent (e.g. via a setuid binary).",
+    "run-as-root": "Set `runAsNonRoot: true` (and a non-zero `runAsUser`) in the pod or container securityContext, so the process can't run as root even if the image itself doesn't define a non-root user.",
+    "missing-seccomp-profile": "Set `securityContext.seccompProfile.type` to `RuntimeDefault` (or `Localhost` with a named profile) at the pod or container level, instead of leaving it unset/Unconfined.",
+    "excessive-capabilities": "Drop all Linux capabilities (`drop: [\"ALL\"]`) and add back only the specific ones this container actually needs, rather than keeping the default set.",
+    "unsigned-container-image": "Ensure the image was built and signed by the expected CI workflow (`cosign sign --yes`, keyless via GitHub Actions OIDC) before it can be deployed. If this fires on a legitimate image, confirm the signing step in backend-ci.yaml/frontend-ci.yaml actually ran and succeeded for this exact image digest.",
+    "unauthorized-process-execution": "Review the matched KubeArmorPolicy/KubeArmorHostPolicy (see the finding's policy name) \u2014 either the process execution is legitimate and the policy needs a corresponding allow rule, or it's genuinely unexpected and worth investigating as a possible compromise.",
+    "unauthorized-network-activity": "Review the matched policy's network rules \u2014 either the connection is expected and needs an allow rule, or it's unexpected outbound/inbound activity worth investigating (e.g. unexpected destination, port, or protocol).",
+    "missing-security-headers": "Add the missing HTTP security header (e.g. Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security) at the web server, reverse proxy, or application framework level.",
+    "info-disclosure": "Avoid returning stack traces or internal error details to end users; log details server-side and return a generic error message."
+  },
+  "scan_status": {
+    "backend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "frontend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "deployed-app": {
+      "zap": "SUCCESS",
+      "kyverno": "SUCCESS",
+      "kubearmor": "SUCCESS"
+    },
+    "infrastructure": {
+      "kube-linter": "SUCCESS",
+      "kubeconform": "SUCCESS"
+    },
+    "terraform": {
+      "checkov": "SUCCESS",
+      "terraform-validate": "SUCCESS"
+    }
+  },
+  "release_statistics": {
+    "total_findings": 9,
+    "by_severity": {
+      "critical": 2,
+      "high": 3,
+      "low": 1,
+      "medium": 3
+    },
+    "by_category": {
+      "privilege-escalation": 1,
+      "run-as-root": 1,
+      "excessive-capabilities": 1,
+      "missing-seccomp-profile": 1,
+      "unauthorized-process-execution": 1,
+      "info-disclosure": 1,
+      "missing-security-headers": 1,
+      "unauthorized-network-activity": 1,
+      "unsigned-container-image": 1
+    },
+    "by_component": {
+      "deployed-app": 9
+    },
+    "by_domain": {
+      "runtime_security": 9
+    }
+  },
+  "signal_availability": {
+    "severity": "available_per_finding",
+    "confidence": "available_per_finding",
+    "fix_availability": "available_per_finding_where_applicable",
+    "delta_status": "not_collected",
+    "reachability": "not_collected",
+    "exploitability": "not_collected",
+    "business_impact": "not_collected",
+    "internet_exposure": "not_collected"
+  },
+  "sbom_summary": {
+    "backend": {
+      "total_packages": 0
+    },
+    "frontend": {
+      "total_packages": 0
+    }
+  },
+  "dependency_summary": {},
+  "supply_chain": {
+    "backend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    },
+    "frontend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    }
+  },
+  "schema_validation": {
+    "valid": true,
+    "summary": {
+      "resources": [],
+      "summary": {
+        "valid": 1,
+        "invalid": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "terraform_validation": {
+    "valid": true,
+    "error_count": 0,
+    "summary": {
+      "format_version": "1.0",
+      "valid": true,
+      "error_count": 0,
+      "warning_count": 0,
+      "diagnostics": []
+    }
+  }
+}

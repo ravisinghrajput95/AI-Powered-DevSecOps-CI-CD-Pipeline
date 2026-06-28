@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "f49851f2b71c6bd9",
+  "generated_at": "2026-01-01T00:00:00+00:00",
+  "release_context_ref": {
+    "repository": "example-org/example-service",
+    "version": "dddd4444dddd4444dddd4444dddd4444dddd4444",
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "executive_summary": {
+    "overall_health": "CRITICAL",
+    "deployment_confidence": "LOW",
+    "dominant_risk_themes": [
+      "Excessive IAM privilege",
+      "Workload Identity disabled"
+    ],
+    "narrative": "This release is dominated by infrastructure misconfigurations: project-level IAM over-privilege, disabled Workload Identity, an open firewall rule, and several lower-severity hardening gaps."
+  },
+  "cross_domain_correlations": [],
+  "top_risks": [
+    {
+      "risk_id": "risk-1",
+      "title": "Project Owner role granted to a service account",
+      "impact": "Broadest possible GCP privilege granted at the project level.",
+      "why_it_matters": "Any workload using this service account inherits full project access.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "0487801b1fb6"
+      ],
+      "recommended_action": "Replace with least-privilege predefined roles."
+    },
+    {
+      "risk_id": "risk-2",
+      "title": "Workload Identity disabled",
+      "impact": "Pods inherit node-level credentials via the metadata server instead of scoped per-pod identity.",
+      "why_it_matters": "Removes the standard GKE mechanism for limiting blast radius of a compromised pod.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "f1f751c2ee51"
+      ],
+      "recommended_action": "Enable Workload Identity on the cluster and node pools."
+    }
+  ],
+  "priority_actions": [
+    {
+      "action_id": "action-1",
+      "title": "Enable Workload Identity and scope IAM to least privilege together",
+      "rationale": "These two findings compound each other; fixing both at once closes the path between them.",
+      "expected_risk_reduction": "Removes the broad-credential-inheritance path entirely.",
+      "dependencies": [],
+      "estimated_complexity": "MEDIUM",
+      "supporting_evidence": [
+        "0487801b1fb6",
+        "f1f751c2ee51"
+      ]
+    }
+  ],
+  "release_readiness": {
+    "recommendation": "DO_NOT_APPROVE",
+    "confidence": "HIGH",
+    "rationale": "Critical IAM over-privilege combined with disabled Workload Identity is an unmitigated, high-confidence finding pair.",
+    "blocking_evidence": [
+      "0487801b1fb6",
+      "f1f751c2ee51"
+    ],
+    "conditions": null
+  },
+  "assumptions_and_unknowns": []
+}

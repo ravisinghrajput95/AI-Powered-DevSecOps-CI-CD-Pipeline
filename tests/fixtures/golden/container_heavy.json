@@ -1,0 +1,264 @@
+{
+  "schema_version": "1.0.0",
+  "release": {
+    "version": "1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa",
+    "repository": "example-org/example-service",
+    "components": [
+      "backend",
+      "frontend"
+    ],
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "provenance": {
+    "application_security": {
+      "source_version": "1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "note": "golden fixture \u2014 synthetic provenance"
+    },
+    "infrastructure_security": {
+      "source_version": "1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "version_matches_application_security": true,
+      "commits_behind": 0,
+      "commits_behind_note": "golden fixture"
+    },
+    "runtime_security": {
+      "zap": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kyverno": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kubearmor": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      }
+    }
+  },
+  "findings": [
+    {
+      "finding_id": "3e4f1bdcc5bd",
+      "component": "backend",
+      "tool": "snyk",
+      "rule_id": "SNYK-DEBIAN12-OPENSSL-1111",
+      "severity": "critical",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "OpenSSL base image package has a critical CVE",
+      "remediation_notes": [
+        "Fix: OpenSSL base image package has a critical CVE"
+      ],
+      "package_name": "openssl",
+      "package_version": "3.0.9",
+      "package_manager": "deb",
+      "original_severity": "critical",
+      "domain": "container_security"
+    },
+    {
+      "finding_id": "762a389bef50",
+      "component": "frontend",
+      "tool": "snyk",
+      "rule_id": "SNYK-DEBIAN12-NODE-4444",
+      "severity": "critical",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Node.js base image package has a critical CVE",
+      "remediation_notes": [
+        "Fix: Node.js base image package has a critical CVE"
+      ],
+      "package_name": "nodejs",
+      "package_version": "18.16.0",
+      "package_manager": "deb",
+      "original_severity": "critical",
+      "domain": "container_security"
+    },
+    {
+      "finding_id": "8de70bc6a7d4",
+      "component": "backend",
+      "tool": "snyk",
+      "rule_id": "SNYK-DEBIAN12-ZLIB-2222",
+      "severity": "high",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "zlib base image package has a high-severity CVE",
+      "remediation_notes": [
+        "Fix: zlib base image package has a high-severity CVE"
+      ],
+      "package_name": "zlib1g",
+      "package_version": "1.2.13",
+      "package_manager": "deb",
+      "original_severity": "high",
+      "domain": "container_security"
+    },
+    {
+      "finding_id": "82f625d4a503",
+      "component": "frontend",
+      "tool": "snyk",
+      "rule_id": "SNYK-DEBIAN12-EXPAT-5555",
+      "severity": "high",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "expat base image package has a high-severity CVE",
+      "remediation_notes": [
+        "Fix: expat base image package has a high-severity CVE"
+      ],
+      "package_name": "expat",
+      "package_version": "2.5.0",
+      "package_manager": "deb",
+      "original_severity": "high",
+      "domain": "container_security"
+    },
+    {
+      "finding_id": "e4db94595590",
+      "component": "backend",
+      "tool": "snyk",
+      "rule_id": "SNYK-DEBIAN12-CURL-3333",
+      "severity": "medium",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "curl base image package has a medium-severity CVE",
+      "remediation_notes": [
+        "Fix: curl base image package has a medium-severity CVE"
+      ],
+      "package_name": "curl",
+      "package_version": "7.88.1",
+      "package_manager": "deb",
+      "original_severity": "medium",
+      "domain": "container_security"
+    }
+  ],
+  "remediation_guide": {
+    "vulnerable-dependency": "Upgrade the affected package or base image to a patched version. If no fix is available yet, check whether the vulnerable code path is actually reachable in this image and document a time-boxed exception (e.g. a Snyk ignore policy) rather than leaving it unaddressed indefinitely."
+  },
+  "scan_status": {
+    "backend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "frontend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "deployed-app": {
+      "zap": "SUCCESS",
+      "kyverno": "SUCCESS",
+      "kubearmor": "SUCCESS"
+    },
+    "infrastructure": {
+      "kube-linter": "SUCCESS",
+      "kubeconform": "SUCCESS"
+    },
+    "terraform": {
+      "checkov": "SUCCESS",
+      "terraform-validate": "SUCCESS"
+    }
+  },
+  "release_statistics": {
+    "total_findings": 5,
+    "by_severity": {
+      "critical": 2,
+      "high": 2,
+      "medium": 1
+    },
+    "by_category": {
+      "vulnerable-dependency": 5
+    },
+    "by_component": {
+      "backend": 3,
+      "frontend": 2
+    },
+    "by_domain": {
+      "container_security": 5
+    }
+  },
+  "signal_availability": {
+    "severity": "available_per_finding",
+    "confidence": "available_per_finding",
+    "fix_availability": "available_per_finding_where_applicable",
+    "delta_status": "not_collected",
+    "reachability": "not_collected",
+    "exploitability": "not_collected",
+    "business_impact": "not_collected",
+    "internet_exposure": "not_collected"
+  },
+  "sbom_summary": {
+    "backend": {
+      "total_packages": 0
+    },
+    "frontend": {
+      "total_packages": 0
+    }
+  },
+  "dependency_summary": {},
+  "supply_chain": {
+    "backend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    },
+    "frontend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    }
+  },
+  "schema_validation": {
+    "valid": true,
+    "summary": {
+      "resources": [],
+      "summary": {
+        "valid": 1,
+        "invalid": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "terraform_validation": {
+    "valid": true,
+    "error_count": 0,
+    "summary": {
+      "format_version": "1.0",
+      "valid": true,
+      "error_count": 0,
+      "warning_count": 0,
+      "diagnostics": []
+    }
+  }
+}

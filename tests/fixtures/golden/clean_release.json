@@ -1,0 +1,166 @@
+{
+  "schema_version": "1.0.0",
+  "release": {
+    "version": "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111",
+    "repository": "example-org/example-service",
+    "components": [
+      "deployed-app",
+      "infrastructure"
+    ],
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "provenance": {
+    "application_security": {
+      "source_version": "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "note": "golden fixture \u2014 synthetic provenance"
+    },
+    "infrastructure_security": {
+      "source_version": "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "version_matches_application_security": true,
+      "commits_behind": 0,
+      "commits_behind_note": "golden fixture"
+    },
+    "runtime_security": {
+      "zap": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kyverno": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kubearmor": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      }
+    }
+  },
+  "findings": [
+    {
+      "finding_id": "9e0f4a59d46d",
+      "component": "infrastructure",
+      "tool": "kube-linter",
+      "rule_id": "missing-annotation",
+      "severity": "informational",
+      "category": "code-quality",
+      "type": "quality",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Deployment missing a recommended annotation",
+      "remediation_notes": [
+        "Fix: Deployment missing a recommended annotation"
+      ],
+      "original_severity": "informational",
+      "domain": "infrastructure_security"
+    }
+  ],
+  "remediation_guide": {
+    "code-quality": "Review the flagged code for correctness; this is a maintainability/quality finding rather than a direct security vulnerability."
+  },
+  "scan_status": {
+    "backend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "frontend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "deployed-app": {
+      "zap": "SUCCESS",
+      "kyverno": "SUCCESS",
+      "kubearmor": "SUCCESS"
+    },
+    "infrastructure": {
+      "kube-linter": "SUCCESS",
+      "kubeconform": "SUCCESS"
+    },
+    "terraform": {
+      "checkov": "SUCCESS",
+      "terraform-validate": "SUCCESS"
+    }
+  },
+  "release_statistics": {
+    "total_findings": 1,
+    "by_severity": {
+      "informational": 1
+    },
+    "by_category": {
+      "code-quality": 1
+    },
+    "by_component": {
+      "infrastructure": 1
+    },
+    "by_domain": {
+      "infrastructure_security": 1
+    }
+  },
+  "signal_availability": {
+    "severity": "available_per_finding",
+    "confidence": "available_per_finding",
+    "fix_availability": "available_per_finding_where_applicable",
+    "delta_status": "not_collected",
+    "reachability": "not_collected",
+    "exploitability": "not_collected",
+    "business_impact": "not_collected",
+    "internet_exposure": "not_collected"
+  },
+  "sbom_summary": {
+    "backend": {
+      "total_packages": 0
+    },
+    "frontend": {
+      "total_packages": 0
+    }
+  },
+  "dependency_summary": {},
+  "supply_chain": {
+    "backend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    },
+    "frontend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    }
+  },
+  "schema_validation": {
+    "valid": true,
+    "summary": {
+      "resources": [],
+      "summary": {
+        "valid": 1,
+        "invalid": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "terraform_validation": {
+    "valid": true,
+    "error_count": 0,
+    "summary": {
+      "format_version": "1.0",
+      "valid": true,
+      "error_count": 0,
+      "warning_count": 0,
+      "diagnostics": []
+    }
+  }
+}

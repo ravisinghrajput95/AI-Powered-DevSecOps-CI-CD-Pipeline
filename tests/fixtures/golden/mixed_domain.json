@@ -1,0 +1,335 @@
+{
+  "schema_version": "1.0.0",
+  "release": {
+    "version": "2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb",
+    "repository": "example-org/example-service",
+    "components": [
+      "backend",
+      "deployed-app",
+      "frontend",
+      "terraform"
+    ],
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "provenance": {
+    "application_security": {
+      "source_version": "2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "note": "golden fixture \u2014 synthetic provenance"
+    },
+    "infrastructure_security": {
+      "source_version": "2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb",
+      "source_generated_at": "2026-01-01T00:00:00+00:00",
+      "version_matches_application_security": true,
+      "commits_behind": 0,
+      "commits_behind_note": "golden fixture"
+    },
+    "runtime_security": {
+      "zap": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kyverno": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      },
+      "kubearmor": {
+        "run_id": "golden",
+        "scanned_at": "2026-01-01T00:00:00+00:00",
+        "days_stale": 0
+      }
+    }
+  },
+  "findings": [
+    {
+      "finding_id": "e56d59eca03b",
+      "component": "backend",
+      "tool": "snyk",
+      "rule_id": "SNYK-PYTHON-CRYPTOGRAPHY-1111",
+      "severity": "critical",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "cryptography has a known critical CVE",
+      "remediation_notes": [
+        "Fix: cryptography has a known critical CVE"
+      ],
+      "package_name": "cryptography",
+      "package_version": "38.0.0",
+      "package_manager": "pip",
+      "original_severity": "critical",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "db5d25cb9447",
+      "component": "backend",
+      "tool": "snyk",
+      "rule_id": "SNYK-PYTHON-CRYPTOGRAPHY-2222",
+      "severity": "high",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "cryptography has a second, separate known CVE at the same version",
+      "remediation_notes": [
+        "Fix: cryptography has a second, separate known CVE at the same version"
+      ],
+      "package_name": "cryptography",
+      "package_version": "38.0.0",
+      "package_manager": "pip",
+      "original_severity": "high",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "13b966354937",
+      "component": "frontend",
+      "tool": "codeql",
+      "rule_id": "js/xss-through-dom",
+      "severity": "medium",
+      "category": "xss",
+      "type": "security",
+      "confidence": "medium",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Potential DOM-based XSS via innerHTML",
+      "remediation_notes": [
+        "Fix: Potential DOM-based XSS via innerHTML"
+      ],
+      "original_severity": "warning",
+      "domain": "application_security"
+    },
+    {
+      "finding_id": "994bafd11fba",
+      "component": "backend",
+      "tool": "snyk",
+      "rule_id": "SNYK-DEBIAN12-OPENSSL-3333",
+      "severity": "medium",
+      "category": "vulnerable-dependency",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "OpenSSL base image package has a medium-severity CVE",
+      "remediation_notes": [
+        "Fix: OpenSSL base image package has a medium-severity CVE"
+      ],
+      "package_name": "openssl",
+      "package_version": "3.0.9",
+      "package_manager": "deb",
+      "original_severity": "medium",
+      "domain": "container_security"
+    },
+    {
+      "finding_id": "0487801b1fb6",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_117",
+      "severity": "critical",
+      "category": "excessive-iam-privilege",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Project Owner role granted to Compute Engine default service account",
+      "remediation_notes": [
+        "Fix: Project Owner role granted to Compute Engine default service account"
+      ],
+      "original_severity": "critical",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "f1f751c2ee51",
+      "component": "terraform",
+      "tool": "checkov",
+      "rule_id": "CKV_GCP_69",
+      "severity": "high",
+      "category": "workload-identity-disabled",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Workload Identity disabled on GKE cluster",
+      "remediation_notes": [
+        "Fix: Workload Identity disabled on GKE cluster"
+      ],
+      "original_severity": "high",
+      "domain": "infrastructure_security"
+    },
+    {
+      "finding_id": "9b21cc78c52e",
+      "component": "deployed-app",
+      "tool": "kubearmor",
+      "rule_id": "ksp-audit-serviceaccount-token-access",
+      "severity": "high",
+      "category": "unauthorized-file-access",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "Pod accessed the GCP metadata server's service-account token endpoint",
+      "remediation_notes": [
+        "Fix: Pod accessed the GCP metadata server's service-account token endpoint"
+      ],
+      "original_severity": "high",
+      "domain": "runtime_security"
+    },
+    {
+      "finding_id": "8b9492be7c39",
+      "component": "deployed-app",
+      "tool": "kyverno",
+      "rule_id": "restrict-seccomp-strict",
+      "severity": "medium",
+      "category": "missing-seccomp-profile",
+      "type": "security",
+      "confidence": "high",
+      "occurrence_count": 1,
+      "locations": [
+        "unknown"
+      ],
+      "sample_message": "No seccomp profile set",
+      "remediation_notes": [
+        "Fix: No seccomp profile set"
+      ],
+      "original_severity": "medium",
+      "domain": "runtime_security"
+    }
+  ],
+  "remediation_guide": {
+    "workload-identity-disabled": "Set `workload_metadata_config.mode = \"GKE_METADATA\"` on the node pool and enable `workload_identity_config` on the cluster, so pods can use scoped per-workload IAM identities instead of inheriting the node's Compute Engine service account.",
+    "excessive-iam-privilege": "Replace the basic role (Owner/Editor/Viewer) or service-account-impersonation-capable role with the narrowest predefined or custom role that covers the actual required permissions \u2014 Owner on a Compute Engine default service account is effectively full project compromise if that SA's key or node is ever exposed.",
+    "unauthorized-file-access": "Review the matched policy's file rules \u2014 either add an allow rule for this legitimate access pattern, or treat it as a possible unauthorized access attempt if the path/process combination is unexpected.",
+    "missing-seccomp-profile": "Set `securityContext.seccompProfile.type` to `RuntimeDefault` (or `Localhost` with a named profile) at the pod or container level, instead of leaving it unset/Unconfined.",
+    "vulnerable-dependency": "Upgrade the affected package or base image to a patched version. If no fix is available yet, check whether the vulnerable code path is actually reachable in this image and document a time-boxed exception (e.g. a Snyk ignore policy) rather than leaving it unaddressed indefinitely.",
+    "xss": "Escape or sanitize user-supplied data before rendering it in HTML/JS output; use the framework's built-in templating auto-escaping."
+  },
+  "scan_status": {
+    "backend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "frontend": {
+      "codeql": "SUCCESS",
+      "sonarcloud": "SUCCESS",
+      "gitguardian": "SUCCESS",
+      "snyk_sca": "SUCCESS"
+    },
+    "deployed-app": {
+      "zap": "SUCCESS",
+      "kyverno": "SUCCESS",
+      "kubearmor": "SUCCESS"
+    },
+    "infrastructure": {
+      "kube-linter": "SUCCESS",
+      "kubeconform": "SUCCESS"
+    },
+    "terraform": {
+      "checkov": "SUCCESS",
+      "terraform-validate": "SUCCESS"
+    }
+  },
+  "release_statistics": {
+    "total_findings": 8,
+    "by_severity": {
+      "critical": 2,
+      "high": 3,
+      "medium": 3
+    },
+    "by_category": {
+      "vulnerable-dependency": 3,
+      "xss": 1,
+      "excessive-iam-privilege": 1,
+      "workload-identity-disabled": 1,
+      "unauthorized-file-access": 1,
+      "missing-seccomp-profile": 1
+    },
+    "by_component": {
+      "backend": 3,
+      "frontend": 1,
+      "terraform": 2,
+      "deployed-app": 2
+    },
+    "by_domain": {
+      "application_security": 3,
+      "container_security": 1,
+      "infrastructure_security": 2,
+      "runtime_security": 2
+    }
+  },
+  "signal_availability": {
+    "severity": "available_per_finding",
+    "confidence": "available_per_finding",
+    "fix_availability": "available_per_finding_where_applicable",
+    "delta_status": "not_collected",
+    "reachability": "not_collected",
+    "exploitability": "not_collected",
+    "business_impact": "not_collected",
+    "internet_exposure": "not_collected"
+  },
+  "sbom_summary": {
+    "backend": {
+      "total_packages": 0
+    },
+    "frontend": {
+      "total_packages": 0
+    }
+  },
+  "dependency_summary": {},
+  "supply_chain": {
+    "backend": {
+      "image_signed": "unknown",
+      "signature_verified": false,
+      "verification_notes": "MANIFEST_UNKNOWN",
+      "verification_status": "UNKNOWN"
+    },
+    "frontend": {
+      "image_signed": true,
+      "signature_verified": true,
+      "verification_notes": "verified",
+      "verification_status": "SUCCESS"
+    }
+  },
+  "schema_validation": {
+    "valid": true,
+    "summary": {
+      "resources": [],
+      "summary": {
+        "valid": 1,
+        "invalid": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "terraform_validation": {
+    "valid": true,
+    "error_count": 0,
+    "summary": {
+      "format_version": "1.0",
+      "valid": true,
+      "error_count": 0,
+      "warning_count": 0,
+      "diagnostics": []
+    }
+  }
+}

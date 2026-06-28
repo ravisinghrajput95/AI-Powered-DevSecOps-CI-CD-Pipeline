@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "99703c78059973f2",
+  "generated_at": "2026-01-01T00:00:00+00:00",
+  "release_context_ref": {
+    "repository": "example-org/example-service",
+    "version": "eeee5555eeee5555eeee5555eeee5555eeee5555",
+    "generated_at": "2026-01-01T00:00:00+00:00"
+  },
+  "executive_summary": {
+    "overall_health": "CRITICAL",
+    "deployment_confidence": "LOW",
+    "dominant_risk_themes": [
+      "Live privilege escalation",
+      "Root execution on running pods"
+    ],
+    "narrative": "This release shows confirmed, live policy violations across the deployed runtime surface: privilege escalation, root execution, missing seccomp profiles, and unsigned images, all confirmed by Kyverno and KubeArmor against running workloads."
+  },
+  "cross_domain_correlations": [],
+  "top_risks": [
+    {
+      "risk_id": "risk-1",
+      "title": "Privilege escalation and root execution live on running pods",
+      "impact": "Confirmed live, not a static config check.",
+      "why_it_matters": "This is an active, exploitable condition right now.",
+      "confidence": "HIGH",
+      "supporting_evidence": [
+        "43213a439b92",
+        "16f9a8df84b3"
+      ],
+      "recommended_action": "Harden securityContext across all deployed workloads."
+    }
+  ],
+  "priority_actions": [
+    {
+      "action_id": "action-1",
+      "title": "Harden all workload securityContexts in one pass",
+      "rationale": "Resolves privilege-escalation, root-execution, seccomp, and capabilities findings together \u2014 they're all the same class of fix.",
+      "expected_risk_reduction": "Eliminates every confirmed live container-hardening violation.",
+      "dependencies": [],
+      "estimated_complexity": "MEDIUM",
+      "supporting_evidence": [
+        "43213a439b92",
+        "16f9a8df84b3",
+        "07c3e8a9e18a",
+        "8b9492be7c39"
+      ]
+    }
+  ],
+  "release_readiness": {
+    "recommendation": "DO_NOT_APPROVE",
+    "confidence": "HIGH",
+    "rationale": "Multiple critical, live runtime violations confirmed by two independent tools (Kyverno and KubeArmor).",
+    "blocking_evidence": [
+      "43213a439b92",
+      "16f9a8df84b3"
+    ],
+    "conditions": null
+  },
+  "assumptions_and_unknowns": []
+}

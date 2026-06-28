@@ -1,0 +1,59 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/tests.yaml"
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/tests.yaml"
+
+jobs:
+  test:
+    name: Run automated test suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r tests/requirements.txt --break-system-packages -q
+
+      - name: Run test suite
+        run: |
+          python3 -m pytest tests/ -v --tb=short
+
+      - name: Regenerate golden dataset (sanity check only — not committed)
+        # Runs the generators fresh in CI to confirm they still execute
+        # cleanly against current scripts/, independent of the committed
+        # fixtures. Does NOT overwrite the committed fixtures — those are
+        # the permanent regression baseline, regenerated only by hand
+        # (see build_golden_dataset.py's docstring for why). Fixtures are
+        # fully deterministic when regenerated from unchanged code
+        # (confirmed: fixed, not real, timestamps) — any diff here means
+        # either a real regression or an intentional fixture update that
+        # wasn't committed.
+        run: |
+          cd tests/fixtures/golden
+          python3 build_golden_dataset.py
+          python3 build_golden_executive_reports.py
+          cd "$GITHUB_WORKSPACE"
+
+      - name: Confirm no uncommitted drift in golden fixtures
+        run: |
+          if ! git diff --quiet tests/fixtures/golden/; then
+            echo "::error::Regenerating the golden dataset from current scripts/ produces output that differs from the committed fixtures. Either a real regression was introduced, or the fixtures need to be regenerated and committed deliberately (never automatically)."
+            git diff tests/fixtures/golden/
+            exit 1
+          fi
