@@ -155,6 +155,7 @@ jobs:
         uses: snyk/actions/setup@master
 
       - name: Scan image with Snyk
+        id: snyk_scan
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
@@ -167,9 +168,9 @@ jobs:
           exit_code=$?
           set -e
           case $exit_code in
-            0) echo "Snyk scan: no vulnerabilities at or above the threshold." ;;
-            1) echo "Snyk scan: vulnerabilities found (report-only, not blocking push)." ;;
-            *) echo "::warning::Snyk scan did not complete cleanly (exit code $exit_code) — check the log above. The report may be missing or incomplete." ;;
+            0) echo "Snyk scan: no vulnerabilities at or above the threshold."; echo "completed=true" >> "$GITHUB_OUTPUT" ;;
+            1) echo "Snyk scan: vulnerabilities found (report-only, not blocking push)."; echo "completed=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::warning::Snyk scan did not complete cleanly (exit code $exit_code) — check the log above. The report may be missing or incomplete."; echo "completed=false" >> "$GITHUB_OUTPUT" ;;
           esac
           exit 0
 
@@ -192,6 +193,29 @@ jobs:
           name: normalized-snyk-backend
           path: normalized-snyk-backend.json
           if-no-files-found: ignore
+
+      # Closes a real, known gap: scan_status.backend.snyk (container scan,
+      # distinct from snyk_sca) used to be unconditionally hardcoded to
+      # "not_configured" in release-readiness.yaml regardless of whether
+      # this scan actually ran — not because the scan was missing (it's
+      # been running and producing real findings all along, see
+      # normalized-snyk-backend above), only because nothing recorded its
+      # outcome. Mirrors the exact "Record scan status" pattern already
+      # proven in app-security-scan-backend.yaml's normalize-and-merge job.
+      - name: Record scan status
+        if: always()
+        run: |
+          cat > scan_status_backend_docker.json << EOF
+          {"snyk": "${{ steps.snyk_scan.outputs.completed == 'true' && 'success' || 'failed' }}"}
+          EOF
+          cat scan_status_backend_docker.json
+
+      - name: Upload scan status
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scan-status-backend-docker
+          path: scan_status_backend_docker.json
 
       # Scans the same local (pre-push) image — no registry auth needed, since
       # the Docker daemon already has it loaded from the build step above.
