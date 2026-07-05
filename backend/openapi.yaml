@@ -1,0 +1,842 @@
+openapi: 3.0.3
+info:
+  title: CloudCart Backend API
+  version: "1.0.0"
+  description: >
+    CloudCart's Flask backend API. This is an **intentionally insecure** application
+    built for DevSecOps training -- endpoints tagged `Admin` and `Vulnerable` are
+    deliberately exploitable (SQL injection, SSRF, path traversal, command injection,
+    broken access control, IDOR, privilege escalation) and are documented here for
+    training/reference purposes only. Do not treat this surface as a template for a
+    real production API.
+servers:
+  - url: /
+    description: Application root. Most routes are under /api; /metrics is the one
+      exception, mounted at the root directly.
+
+tags:
+  - name: Auth
+    description: Registration, login/logout, current-user lookup.
+  - name: Products
+    description: Product catalog and search.
+  - name: Cart
+    description: Per-user shopping cart.
+  - name: Orders
+    description: Checkout and order history.
+  - name: Reviews
+    description: Product reviews.
+  - name: Profile
+    description: User profile management.
+  - name: Admin
+    description: >
+      VULN: none of these endpoints check for an admin role -- any caller can use them.
+  - name: Metrics
+    description: Prometheus scrape endpoint. Mounted at the application root (`/metrics`),
+      not under the `/api` prefix used by everything else.
+  - name: Vulnerable
+    description: >
+      Endpoints intentionally built to demonstrate SSRF, path traversal, insecure file
+      upload, and debug-information exposure.
+
+paths:
+  /metrics:
+    get:
+      tags: [Metrics]
+      summary: Prometheus metrics
+      description: >
+        Mounted at the application root, not under `/api` -- the blueprint that defines
+        this route is registered without a `url_prefix`.
+      responses:
+        "200":
+          description: Prometheus text-format metrics
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password]
+              properties:
+                username: { type: string }
+                email: { type: string }
+                password: { type: string }
+                full_name: { type: string }
+      responses:
+        "201":
+          description: Registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  user: { $ref: "#/components/schemas/User" }
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Username already exists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in and receive a session cookie + JWT
+      description: >
+        VULN: issued JWT has a 365-day expiration and is signed with a weak secret;
+        the session cookie is set without `Secure`/`HttpOnly` flags.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  token: { type: string, description: "JWT, valid 365 days" }
+                  user: { $ref: "#/components/schemas/User" }
+                  session_id: { type: integer }
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Clear the current session
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the current session's user
+      description: >
+        VULN: accepts `user_id` as a query param as a fallback for the session cookie,
+        and `?debug=true` returns sensitive fields (password hash, API key) regardless
+        of caller identity.
+      parameters:
+        - name: user_id
+          in: query
+          schema: { type: integer }
+        - name: debug
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/products/:
+    get:
+      tags: [Products]
+      summary: List products
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+    post:
+      tags: [Products]
+      summary: Create a product
+      description: "VULN: no authorization check -- anyone can create products."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                price: { type: number }
+                category: { type: string }
+                image_url: { type: string }
+                stock: { type: integer }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+
+  /api/products/{product_id}:
+    get:
+      tags: [Products]
+      summary: Get a single product
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "404":
+          description: Not found
+
+  /api/products/search:
+    get:
+      tags: [Products]
+      summary: Search products
+      description: >
+        VULN: SQL injection -- `q` and `category` are concatenated directly into a raw
+        SQL string. Errors also echo the constructed query back to the caller.
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Matching products
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+        "500":
+          description: Query error (echoes the raw SQL that was executed)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/cart/:
+    get:
+      tags: [Cart]
+      summary: Get the current user's cart
+      parameters:
+        - name: user_id
+          in: query
+          schema: { type: integer }
+        - name: X-User-Id
+          in: header
+          schema: { type: string }
+      responses:
+        "200":
+          description: Cart items, each with the embedded product
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  allOf:
+                    - { $ref: "#/components/schemas/CartItem" }
+                    - type: object
+                      properties:
+                        product: { $ref: "#/components/schemas/Product" }
+        "401":
+          description: Not authenticated
+
+  /api/cart/add:
+    post:
+      tags: [Cart]
+      summary: Add an item to the cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                product_id: { type: integer }
+                quantity: { type: integer, default: 1 }
+      responses:
+        "200":
+          description: Added to cart
+        "401":
+          description: Not authenticated
+
+  /api/cart/remove/{item_id}:
+    delete:
+      tags: [Cart]
+      summary: Remove a cart item
+      description: "VULN: broken access control -- no check that the item belongs to the caller."
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Removed from cart
+        "404":
+          description: Item not found
+
+  /api/cart/clear:
+    post:
+      tags: [Cart]
+      summary: Clear the current user's cart
+      responses:
+        "200":
+          description: Cart cleared
+
+  /api/orders/:
+    get:
+      tags: [Orders]
+      summary: List orders
+      description: >
+        VULN: IDOR -- `?all=true` returns every user's orders, and `user_id` can be set
+        to any value to view another user's orders.
+      parameters:
+        - name: user_id
+          in: query
+          schema: { type: integer }
+        - name: all
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Order" }
+
+  /api/orders/{order_id}:
+    get:
+      tags: [Orders]
+      summary: Get an order with its line items
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Order with items
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/Order" }
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/OrderItem" }
+        "404":
+          description: Not found
+
+  /api/orders/checkout:
+    post:
+      tags: [Orders]
+      summary: Check out the current cart, creating an order
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id: { type: integer }
+                shipping_address: { type: string }
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "400":
+          description: Cart is empty
+        "401":
+          description: Not authenticated
+
+  /api/orders/{order_id}/status:
+    put:
+      tags: [Orders]
+      summary: Update an order's status
+      description: "VULN: no authorization -- any caller can update any order's status."
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string }
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+
+  /api/reviews/product/{product_id}:
+    get:
+      tags: [Reviews]
+      summary: List reviews for a product
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Review" }
+
+  /api/reviews/:
+    post:
+      tags: [Reviews]
+      summary: Create a review
+      description: "VULN: stored XSS -- `comment` is persisted and returned without sanitization."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                product_id: { type: integer }
+                user_id: { type: integer }
+                rating: { type: integer, default: 5 }
+                comment: { type: string }
+      responses:
+        "201":
+          description: Review created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Review" }
+
+  /api/reviews/{review_id}:
+    delete:
+      tags: [Reviews]
+      summary: Delete a review
+      description: "VULN: no authorization check."
+      parameters:
+        - name: review_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  /api/profile/{user_id}:
+    get:
+      tags: [Profile]
+      summary: Get a user's profile
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: full
+          in: query
+          schema: { type: string }
+          description: "VULN: `?full=true` includes password_hash and api_key with no auth check."
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+    put:
+      tags: [Profile]
+      summary: Update a user's profile
+      description: "VULN: broken access control -- can update any user's profile, including their role."
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name: { type: string }
+                email: { type: string }
+                password: { type: string }
+                role: { type: string }
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+
+  /api/profile/{user_id}/api-key:
+    get:
+      tags: [Profile]
+      summary: Get a user's API key
+      description: "VULN: exposes another user's API key with no auth check."
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: API key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key: { type: string }
+
+  /api/admin/stats:
+    get:
+      tags: [Admin]
+      summary: Aggregate store stats
+      description: "VULN: no admin role check."
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users: { type: integer }
+                  products: { type: integer }
+                  orders: { type: integer }
+                  revenue: { type: number }
+
+  /api/admin/users:
+    get:
+      tags: [Admin]
+      summary: List all users
+      description: "VULN: no authorization -- exposes every user's password hash and API key."
+      responses:
+        "200":
+          description: Users, with sensitive fields included
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+
+  /api/admin/users/{user_id}/role:
+    put:
+      tags: [Admin]
+      summary: Change a user's role
+      description: "VULN: privilege escalation -- no auth required."
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string }
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+
+  /api/admin/internal:
+    get:
+      tags: [Admin]
+      summary: Dump internal secrets
+      description: "VULN: returns SECRET_KEY, AWS credentials, Stripe key, and internal service URLs in plaintext."
+      responses:
+        "200":
+          description: Secrets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret_key: { type: string }
+                  aws_key: { type: string }
+                  aws_secret: { type: string }
+                  stripe_key: { type: string }
+                  services: { type: object }
+
+  /api/admin/exec:
+    post:
+      tags: [Admin]
+      summary: Execute an arbitrary shell command
+      description: "VULN: command injection -- runs `command` via `subprocess` with `shell=True`."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                command: { type: string, default: "echo hello" }
+      responses:
+        "200":
+          description: Command output
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  output: { type: string }
+
+  /api/admin/env:
+    get:
+      tags: [Admin]
+      summary: Dump all environment variables
+      description: "VULN: sensitive information exposure."
+      responses:
+        "200":
+          description: Environment variables
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/vuln/fetch:
+    post:
+      tags: [Vulnerable]
+      summary: Fetch an arbitrary URL server-side
+      description: "VULN: SSRF -- fetches any URL provided, including internal/metadata services, with TLS verification disabled."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string }
+      responses:
+        "200":
+          description: Response from the fetched URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status_code: { type: integer }
+                  headers: { type: object }
+                  body: { type: string }
+        "400":
+          description: url required
+        "500":
+          description: Fetch error
+
+  /api/vuln/proxy:
+    get:
+      tags: [Vulnerable]
+      summary: Proxy a GET request to an arbitrary URL
+      description: >
+        VULN: SSRF via query param -- defaults to an internal metadata service URL if
+        `url` isn't provided.
+      parameters:
+        - name: url
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Proxied response body
+
+  /api/vuln/file:
+    get:
+      tags: [Vulnerable]
+      summary: Read an arbitrary file from disk
+      description: "VULN: path traversal -- no sanitization of `path`, defaults to `/etc/passwd`."
+      parameters:
+        - name: path
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: File contents (truncated to 50000 chars)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content: { type: string }
+        "500":
+          description: Read error, includes the attempted path
+
+  /api/vuln/upload:
+    post:
+      tags: [Vulnerable]
+      summary: Upload a file
+      description: >
+        VULN: insecure upload -- no content-type validation (executables allowed), and
+        the original filename (including any path traversal) is used as-is.
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  filename: { type: string }
+                  path: { type: string }
+                  url: { type: string }
+        "400":
+          description: No file provided
+
+  /api/vuln/download:
+    get:
+      tags: [Vulnerable]
+      summary: Download an uploaded file
+      parameters:
+        - name: filename
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: File contents
+
+  /api/vuln/debug:
+    get:
+      tags: [Vulnerable]
+      summary: Dump debug info
+      description: "VULN: exposes full app config and the complete URL map."
+      responses:
+        "200":
+          description: Debug info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  debug: { type: boolean }
+                  config: { type: object }
+                  routes:
+                    type: array
+                    items: { type: string }
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        email: { type: string }
+        full_name: { type: string }
+        role: { type: string }
+        created_at: { type: string, format: date-time }
+        password_hash:
+          type: string
+          description: Only present when the caller requests sensitive fields (no auth check).
+        api_key:
+          type: string
+          description: Only present when the caller requests sensitive fields (no auth check).
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        price: { type: number }
+        category: { type: string }
+        image_url: { type: string }
+        stock: { type: integer }
+        created_at: { type: string, format: date-time }
+    CartItem:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        product_id: { type: integer }
+        quantity: { type: integer }
+    Order:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        status: { type: string }
+        total: { type: number }
+        shipping_address: { type: string }
+        created_at: { type: string, format: date-time }
+    OrderItem:
+      type: object
+      properties:
+        id: { type: integer }
+        order_id: { type: integer }
+        product_id: { type: integer }
+        quantity: { type: integer }
+        price: { type: number }
+    Review:
+      type: object
+      properties:
+        id: { type: integer }
+        product_id: { type: integer }
+        user_id: { type: integer }
+        rating: { type: integer }
+        comment: { type: string }
+        created_at: { type: string, format: date-time }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
