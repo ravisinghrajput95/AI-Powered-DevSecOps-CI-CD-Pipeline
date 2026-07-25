@@ -74,6 +74,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from normalizer_common import parse_args, load_report, write_findings
 from classify_finding import classify, classify_recommendation
 
 
@@ -175,19 +176,8 @@ def normalize_file(json_path):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: normalize_snyk.py <output.json> <snyk_json_file>", file=sys.stderr)
-        sys.exit(1)
-
-    output_path = sys.argv[1]
-    input_path = sys.argv[2]
-
-    all_findings = normalize_file(input_path)
-
-    with open(output_path, "w") as f:
-        json.dump(all_findings, f, indent=2)
-
-    print(f"Normalized {len(all_findings)} Snyk findings -> {output_path}")
+    output_path, input_path = parse_args("normalize_snyk.py", ["<output.json>", "<snyk_json_file>"])
+    write_findings(output_path, normalize_file(input_path), "Snyk")
 
 
 if __name__ == "__main__":

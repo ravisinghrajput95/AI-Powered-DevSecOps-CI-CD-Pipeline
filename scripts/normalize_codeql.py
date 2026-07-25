@@ -11,6 +11,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from normalizer_common import parse_args, load_report, write_findings
 from classify_finding import classify, build_line_field
 
 
@@ -60,21 +61,10 @@ def normalize_sarif(sarif_path):
 
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: normalize_codeql.py <output.json> <sarif_file_1> [sarif_file_2 ...]", file=sys.stderr)
-        sys.exit(1)
-
-    output_path = sys.argv[1]
-    sarif_paths = sys.argv[2:]
-
-    all_findings = []
-    for path in sarif_paths:
-        all_findings.extend(normalize_sarif(path))
-
-    with open(output_path, "w") as f:
-        json.dump(all_findings, f, indent=2)
-
-    print(f"Normalized {len(all_findings)} CodeQL findings -> {output_path}")
+    args = parse_args("normalize_codeql.py", ["<output.json>", "<sarif_file>..."])
+    output_path, sarif_paths = args[0], args[1:]
+    findings = [f for p in sarif_paths for f in normalize_sarif(p)]
+    write_findings(output_path, findings, "CodeQL")
 
 
 if __name__ == "__main__":

@@ -53,6 +53,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from normalizer_common import parse_args, load_report, write_findings
 from classify_finding import classify_category, classify_recommendation
 from classify_finding import TYPE_BY_CATEGORY, DEFAULT_TYPE
 
@@ -128,19 +129,9 @@ def normalize_report(report_path):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: normalize_zap.py <output.json> <zap_report.json>", file=sys.stderr)
-        sys.exit(1)
-
-    output_path = sys.argv[1]
-    report_path = sys.argv[2]
-
+    output_path, report_path = parse_args("normalize_zap.py", ["<output.json>", "<zap_report.json>"])
     findings = normalize_report(report_path)
-
-    with open(output_path, "w") as f:
-        json.dump(findings, f, indent=2)
-
-    print(f"Normalized {len(findings)} ZAP findings -> {output_path}")
+    write_findings(output_path, findings, "ZAP")
 
 
 if __name__ == "__main__":

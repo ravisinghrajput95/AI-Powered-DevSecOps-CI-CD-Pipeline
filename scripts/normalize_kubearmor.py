@@ -76,6 +76,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from normalizer_common import parse_args, load_report, write_findings
 from classify_finding import TYPE_BY_CATEGORY, DEFAULT_TYPE, classify_recommendation
 
 OPERATION_TO_CATEGORY = {
@@ -191,26 +192,9 @@ def normalize_report(report_text):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: normalize_kubearmor.py <output.json> <kubearmor_logs.json>", file=sys.stderr)
-        sys.exit(1)
-
-    output_path = sys.argv[1]
-    report_path = sys.argv[2]
-
-    try:
-        with open(report_path) as f:
-            report_text = f.read()
-    except FileNotFoundError as e:
-        print(f"WARNING: could not read {report_path}: {e}", file=sys.stderr)
-        report_text = ""
-
-    findings = normalize_report(report_text)
-
-    with open(output_path, "w") as f:
-        json.dump(findings, f, indent=2)
-
-    print(f"Normalized {len(findings)} kubearmor findings -> {output_path}")
+    output_path, report_path = parse_args("normalize_kubearmor.py", ["<output.json>", "<kubearmor_logs.json>"])
+    findings = normalize_report(load_report(report_path, mode="text"))
+    write_findings(output_path, findings, "kubearmor")
 
 
 if __name__ == "__main__":

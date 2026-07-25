@@ -67,6 +67,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from normalizer_common import parse_args, load_report, write_findings
 from classify_finding import TYPE_BY_CATEGORY, DEFAULT_TYPE, classify_recommendation, build_line_field
 
 # (severity, category) per Checkov check_id. Severity uses this pipeline's
@@ -185,26 +186,9 @@ def normalize_report(report):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: normalize_checkov.py <output.json> <checkov_report.json>", file=sys.stderr)
-        sys.exit(1)
-
-    output_path = sys.argv[1]
-    report_path = sys.argv[2]
-
-    try:
-        with open(report_path) as f:
-            report = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        print(f"WARNING: could not read {report_path}: {e}", file=sys.stderr)
-        report = {}
-
-    findings = normalize_report(report)
-
-    with open(output_path, "w") as f:
-        json.dump(findings, f, indent=2)
-
-    print(f"Normalized {len(findings)} checkov findings -> {output_path}")
+    output_path, report_path = parse_args("normalize_checkov.py", ["<output.json>", "<checkov_report.json>"])
+    findings = normalize_report(load_report(report_path))
+    write_findings(output_path, findings, "checkov")
 
 
 if __name__ == "__main__":
