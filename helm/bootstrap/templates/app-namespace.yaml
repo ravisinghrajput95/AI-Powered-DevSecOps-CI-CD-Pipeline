@@ -1,0 +1,23 @@
+# The application namespace, created here rather than by --create-namespace
+# on the app install, because the KubeArmor annotation has to be present
+# BEFORE any workload pod starts.
+#
+# Confirmed on 2026-07-25: with KubeArmor installed, all 8 policies loaded,
+# the DaemonSet enforcing via BPF-LSM, and the correct pod labels, a shell
+# exec in the backend container still produced ZERO alerts. Telemetry was
+# flowing (1,470 ContainerLog events, correctly attributed) but every event
+# carried PolicyName: null and Enforcer: null, and no MatchedPolicy events
+# existed at all — so normalized-kubearmor.json was an empty array and the
+# runtime domain silently lost its most important signal.
+#
+# The namespace had no kubearmor-visibility annotation. KubeArmor derives
+# per-namespace visibility from it; without it, policies load but never
+# evaluate against workloads in that namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.appNamespace }}
+  annotations:
+    kubearmor-visibility: "process,file,network,capabilities"
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}

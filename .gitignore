@@ -181,3 +181,8 @@ gitguardian-findings.json
 codeql-*-report.csv
 normalized-*.json
 security-findings-*.json
+
+# Helm dependency tarballs — pinned by Chart.lock, fetched via
+# `helm dependency update`. Committing them bloats the repo and makes the
+# lockfile ambiguous about what is actually deployed.
+helm/**/charts/*.tgz

@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────
+# Cluster prerequisites. Install ONCE per cluster, before the
+# application charts:
+#
+#   helm dependency update helm/bootstrap
+#   helm upgrade --install cloudcart-bootstrap helm/bootstrap \
+#     --namespace cloudcart-system --create-namespace --wait
+#
+# ─────────────────────────────────────────────────────────────
+
+# Namespace the application runs in. Created here (rather than by
+# --create-namespace on the app install) because it needs the KubeArmor
+# visibility annotation applied BEFORE any workload starts — see
+# templates/app-namespace.yaml.
+appNamespace: cloudcart
+
+# Supplies the monitoring.coreos.com CRDs that
+# helm/cloudcart/charts/backend/templates/servicemonitor.yaml needs.
+#
+# Resource requests matter: on 2026-07-25 the default stack consumed
+# almost all allocatable CPU on a 3-node e2-medium pool, leaving Kyverno's
+# admission and cleanup controllers Pending with "0/3 nodes are available:
+# 3 Insufficient cpu". Either size the node pool for it or trim these.
+kube-prometheus-stack:
+  enabled: true
+  prometheus:
+    prometheusSpec:
+      scrapeInterval: 15s
+      podMonitorSelectorNilUsesHelmValues: false
+      serviceMonitorSelectorNilUsesHelmValues: false
+      resources:
+        requests: {cpu: 100m, memory: 400Mi}
+  grafana:
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+  alertmanager:
+    alertmanagerSpec:
+      resources:
+        requests: {cpu: 25m, memory: 64Mi}
+
+# Supplies the wgpolicyk8s.io PolicyReport / ClusterPolicyReport CRDs that
+# runtime-security-scan.yaml queries. Without it that job fails at
+# `kubectl get policyreport`, and because one failed job fails the whole
+# run, release-readiness (which filters upstream sources on
+# --status=success) silently loses the ENTIRE runtime domain — Kyverno and
+# KubeArmor data included.
+kyverno:
+  enabled: true
+
+# Supplies the security.kubearmor.com CRDs. The operator alone is not
+# sufficient: it only registers KubeArmorConfig until a KubeArmorConfig CR
+# exists, which is what templates/kubearmor-config.yaml provides.
+kubearmor-operator:
+  enabled: true
+
+kubearmor:
+  # Creates the KubeArmorConfig CR that makes the operator deploy the
+  # DaemonSet and register KubeArmorPolicy / KubeArmorHostPolicy.
+  createConfig: true

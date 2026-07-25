@@ -1,0 +1,28 @@
+{{- if and (index .Values "kubearmor-operator" "enabled") .Values.kubearmor.createConfig }}
+# The kubearmor-operator chart installs the operator and the
+# KubeArmorConfig CRD only. Until a KubeArmorConfig RESOURCE exists the
+# operator does nothing: no DaemonSet, and — critically — no
+# security.kubearmor.com/v1 KubeArmorPolicy CRD.
+#
+# Without this, `kubectl apply -f policies/kubearmor/ -R` in
+# runtime-security-scan.yaml fails with:
+#   no matches for kind "KubeArmorPolicy" in version
+#   "security.kubearmor.com/v1"
+# which fails the job, fails the run, and (via release-readiness's
+# --status=success filter) removes the whole runtime domain from the report.
+#
+# helm.sh/hook-weight orders this after the operator's own resources.
+apiVersion: operator.kubearmor.com/v1
+kind: KubeArmorConfig
+metadata:
+  name: kubearmorconfig-default
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+spec:
+  defaultCapabilitiesPosture: audit
+  defaultFilePosture: audit
+  defaultNetworkPosture: audit
+  defaultVisibility: process,file,network,capabilities
+{{- end }}

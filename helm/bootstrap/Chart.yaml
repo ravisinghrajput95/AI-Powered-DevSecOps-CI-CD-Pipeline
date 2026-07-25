@@ -1,0 +1,34 @@
+apiVersion: v2
+name: cloudcart-bootstrap
+description: >-
+  Cluster prerequisites for CloudCart — the CRDs, controllers, and namespace
+  configuration that the application chart and the security workflows assume
+  already exist. Install this once per cluster, before helm/postgresql and
+  helm/cloudcart.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+# Upstream charts are declared as dependencies rather than documented as
+# manual `helm install` commands, so the whole prerequisite set is one
+# versioned, reproducible operation.
+#
+# Every entry here was installed BY HAND during the 2026-07-25 cluster
+# rebuild, and each omission produced a failure that looked like a bug in
+# this repo rather than a missing prerequisite:
+#   - no Prometheus CRDs  -> cloudcart chart failed on ServiceMonitor
+#   - no Kyverno          -> runtime-security-scan found no policyreport CRD
+#   - no KubeArmor        -> "no matches for kind KubeArmorPolicy"
+dependencies:
+  - name: kube-prometheus-stack
+    version: "~77.0.0"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: kube-prometheus-stack.enabled
+  - name: kyverno
+    version: "~3.5.0"
+    repository: "https://kyverno.github.io/kyverno/"
+    condition: kyverno.enabled
+  - name: kubearmor-operator
+    version: "~1.5.0"
+    repository: "https://kubearmor.github.io/charts"
+    condition: kubearmor-operator.enabled
