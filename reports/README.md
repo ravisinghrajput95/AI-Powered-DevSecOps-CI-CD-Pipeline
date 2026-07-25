@@ -1,9 +1,8 @@
 # Sample Release Intelligence Report
 
-A **real, unedited** report produced by this pipeline. Committed because
-GitHub Actions artifacts expire, so anyone visiting this repository later
-would otherwise have no way to see what the AI Release Intelligence Engine
-actually outputs.
+A **real** report produced by this pipeline. Committed because GitHub Actions
+artifacts expire, so anyone visiting this repository later would otherwise
+have no way to see what the AI Release Intelligence Engine actually outputs.
 
 | | |
 |---|---|
@@ -20,21 +19,32 @@ actually outputs.
 |---|---|
 | [`sample/release_report.md`](sample/release_report.md) | The rendered report — **start here** |
 | [`sample/release_report.html`](sample/release_report.html) | Same report, styled |
-| [`sample/executive_report.json`](sample/executive_report.json) | The AI's structured output, schema-validated |
-| [`sample/final_release_context.json`](sample/final_release_context.json) | The input the model reasoned over |
 
-Both JSON files are the actual contracts, not illustrations:
-`executive_report.json` conforms to `scripts/executive_report_schema.py` and
-`final_release_context.json` to `scripts/release_context_schema.py`. Every
-`finding_id` cited in the report was verified to exist in the context before
-the artifact was written — a check that exists because an early run once
-cited the same finding twice with a transposed id.
+## ⚠️ Placeholders
+
+**These files are not byte-identical to the pipeline's output.** The real GCP
+project ID was replaced with `<GCP_PROJECT_ID>` in 344 places before
+committing — it appears throughout as Artifact Registry image paths:
+
+```
+us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/cloudcart-frontend/cloudcart-frontend:<sha>
+```
+
+That substitution is the **only** modification. Findings, severities,
+correlations, verdict, reasoning and finding-id citations are all exactly as
+generated. If you regenerate this report yourself, expect your own project id
+in those paths.
+
+Nothing else is redacted. The pipeline's normalizers record rule ids and
+locations rather than secret values, so no credential — including the AWS,
+Stripe and GitHub keys deliberately planted in this codebase — appears in the
+output.
 
 ## What it demonstrates
 
 **Cross-tool correlation.** The report links Kyverno's live admission
-failures to Checkov's static IaC findings, and CodeQL's injection findings
-to SonarCloud's independently. No single scanner produces those statements —
+failures to Checkov's static IaC findings, and CodeQL's injection findings to
+SonarCloud's independently. No single scanner produces those statements —
 that correlation is the reason this pipeline exists.
 
 **Honest gaps.** `scan_status.deployed-app.kubearmor` is `NO_SIGNAL`, and the
@@ -76,3 +86,8 @@ gh workflow run release-readiness.yaml -f run_ai_analysis=true
 
 Leave `run_ai_analysis` unset to build `final_release_context.json` only —
 free, no API call, and enough to verify the data plumbing.
+
+The structured `executive_report.json` and `final_release_context.json` are
+produced as workflow artifacts on every run. They are deliberately **not**
+committed here — they are large, and the context file carries the same
+project id throughout.
