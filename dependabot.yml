@@ -1,0 +1,50 @@
+# DELIBERATELY NOT IN .github/ — this file is inert here, and that is the point.
+#
+# GitHub only reads .github/dependabot.yml. Keeping it at the repo root
+# disables Dependabot VERSION UPDATES while preserving the config as
+# documentation of what would be scanned if this were a normal app.
+#
+# Why disabled: CloudCart's dependencies are intentionally vulnerable
+# (backend/requirements-vulnerable.txt, frontend/package.json pins, the
+# Dockerfile base images). Version-update PRs would upgrade those away and
+# silence the Snyk/Trivy/container findings the AI release reports depend
+# on — and generate ~11 PRs per run doing it.
+#
+# Dependabot security ALERTS are unaffected: they come from a repo-settings
+# toggle, need no config file, and still feed findings into the pipeline.
+#
+# Moving this into .github/ re-enables the noise. Confirmed by doing exactly
+# that on 2026-07-25: 11 PRs within two minutes, all against intentional vulns.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    # NOTE: pip scans EVERY requirements*.txt in this directory, not just
+    # requirements.txt — so requirements-vulnerable.txt (intentional CVEs,
+    # consumed by backend/Dockerfile) and requirements-dev.txt are both
+    # included. PRs touching requirements-vulnerable.txt must be closed:
+    # merging one removes demo findings the AI release reports depend on.
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
