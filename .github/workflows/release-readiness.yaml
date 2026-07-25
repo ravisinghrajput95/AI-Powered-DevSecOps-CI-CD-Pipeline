@@ -7,6 +7,13 @@ on:
         description: "Commit SHA to assess (defaults to this ref's HEAD if left blank)"
         required: false
         type: string
+      model:
+        description: "Model for the AI Release Intelligence Engine. Cost per report at ~48k in / ~11k out: sonnet ~$0.30, haiku ~$0.10. Cross-domain correlation is the hardest reasoning here, so haiku trades report depth for cost."
+        required: false
+        default: "claude-sonnet-4-6"
+        type: choice
+        options: ["claude-sonnet-4-6", "claude-haiku-4-5"]
+
       container_severity_floor:
         description: "Lowest container-scan severity to include (critical|high|medium|low|informational). Container scans run WITHOUT a scanner-side threshold, so the raw artifacts always hold everything; this only decides what the AI reasons over. Default 'high' — OS base images produce very long low-severity tails (1,341 findings excluded on 2026-07-25) that add ~70% to context size and cost without changing a release decision."
         required: false
@@ -478,6 +485,10 @@ jobs:
         if: ${{ inputs.run_ai_analysis }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # run_security_analysis.py reads $ANTHROPIC_MODEL as its --model
+          # default. Surfaced as a dispatch input so a cost-constrained run
+          # can pick a cheaper model without editing code.
+          ANTHROPIC_MODEL: ${{ inputs.model || 'claude-sonnet-4-6' }}
         run: |
           pip install jsonschema --break-system-packages -q
           python3 scripts/run_security_analysis.py \
