@@ -295,8 +295,10 @@ jobs:
       # Fixed at the source (backend-ci.yaml/frontend-ci.yaml now write
       # scan_status_*_docker.json) — this just reads it now, the same
       # honest-fallback way scan_status_backend.json's absence is already
-      # handled below. "syft" remains genuinely not instrumented — no
-      # workflow records its outcome yet, this PR didn't touch that.
+      # handled below. The same fix has since been applied to "syft": it was
+      # reported as not_configured while actually running and producing a
+      # ~400KB SBOM every build, so the report claimed SBOM generation
+      # wasn't set up when it demonstrably was.
       - name: Merge scan status
         run: |
           python3 - << 'EOF'
@@ -306,10 +308,12 @@ jobs:
           # codeql/sonarcloud/gitguardian/snyk_sca are what
           # app-security-scan-*.yaml actually tracks.
           TRACKED_BY_SECURITY_SCAN = ("codeql", "sonarcloud", "gitguardian", "snyk_sca")
-          # "syft" (SBOM generation) still isn't instrumented by any
-          # workflow — genuinely not_configured, not a fallback default
-          # standing in for missing data.
-          STILL_NOT_INSTRUMENTED = ("syft",)
+          # Nothing is uninstrumented any more: snyk (container) and syft
+          # are both recorded by backend-ci.yaml/frontend-ci.yaml in
+          # scan_status_*_docker.json. Kept as an explicit empty tuple so a
+          # future tool added without status recording has an obvious place
+          # to be declared, rather than silently defaulting to "success".
+          STILL_NOT_INSTRUMENTED = ()
 
           def build_component_status(status_path, docker_status_path):
               if not os.path.exists(status_path):
@@ -327,6 +331,9 @@ jobs:
                   with open(docker_status_path) as f:
                       docker_raw = json.load(f)
                   result["snyk"] = docker_raw.get("snyk", "not_configured")
+                  # syft: same treatment. Absent means the run predates
+                  # syft-status recording, not that SBOM generation is off.
+                  result["syft"] = docker_raw.get("syft", "not_configured")
               else:
                   result["snyk"] = "not_configured"
 
