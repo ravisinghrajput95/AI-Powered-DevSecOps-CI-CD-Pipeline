@@ -134,7 +134,7 @@ Cloudcart/
 |   `-- kubearmor/            # KubeArmor runtime policies
 |-- .github/workflows/        # CI/CD + AI Release Intelligence pipelines
 |-- scripts/                  # Normalizers, ReleaseContext builders, AI agent, renderers
-|-- tests/                    # 524 automated tests + golden regression dataset
+|-- tests/                    # 539 automated tests + golden regression dataset
 |-- docker-compose.yml
 |-- README.md
 ```
@@ -401,7 +401,7 @@ flowchart TD
 
 ### Test suite
 
-524 automated tests (`tests/`) — schema validation, evidence-citation integrity, cross-domain correlation integrity, renderer correctness, and a golden regression dataset covering 8 representative scenarios. Full detail in [ARCHITECTURE.md](ARCHITECTURE.md#test-suite).
+539 automated tests (`tests/`) — schema validation, evidence-citation integrity, cross-domain correlation integrity, renderer correctness, and a golden regression dataset covering 8 representative scenarios. Full detail in [ARCHITECTURE.md](ARCHITECTURE.md#test-suite).
 
 ```bash
 pip install -r tests/requirements.txt

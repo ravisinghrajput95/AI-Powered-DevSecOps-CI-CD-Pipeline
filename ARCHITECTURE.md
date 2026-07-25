@@ -142,7 +142,7 @@ AI-authored fields: `executive_summary`, `cross_domain_correlations[]`, `top_ris
 
 ## Test suite
 
-524 automated tests in `tests/`:
+539 automated tests in `tests/`:
 
 - Schema validation for both contracts, against golden fixtures and real frozen CI artifacts.
 - Evidence-citation integrity — every cited `finding_id` must exist in real findings. This is the single highest-value check: it's the exact test that would have caught a real citation bug from an early run (a transposed character in a `finding_id`, cited twice with two slightly different values).
@@ -154,3 +154,31 @@ AI-authored fields: `executive_summary`, `cross_domain_correlations[]`, `top_ris
 pip install -r tests/requirements.txt
 python3 -m pytest
 ```
+- Workflow structural invariants (`tests/test_workflow_invariants.py`) — 17 guards over the security workflows themselves: a scan status must derive from a step's own exit code rather than `needs.<job>.result` (which `continue-on-error` masks), no scanner-side severity filtering, actions pinned to commit SHAs, deploy gated on push-from-`main`. Every one of these encodes a defect that shipped green over incomplete data.
+- API request shape (`tests/test_api_request_shape.py`) — `temperature` pinned, `tool_choice` forced, API key in the header not the body. `urlopen` is stubbed, so no network call and no key.
+
+## Known gaps
+
+Stated plainly, because a security tool that overstates its own coverage is
+the exact failure it exists to catch.
+
+### Unmeasured
+
+- **Reasoning quality.** Citations are checked for existence, and correlations for structural consistency with their evidence. Whether an insight is a *good* one is a human judgement. Nothing here measures it, and `tests/test_cross_domain_integrity.py` says so in its own docstring.
+- **Run-to-run stability.** `temperature` is pinned to 0 to reduce variance, but inference is not bit-deterministic even at 0, and nobody has quantified what remains. Doing so means N runs over one context — real API spend, deliberately not incurred.
+- **`container_security` reasoning.** Real findings are confirmed flowing through the data path (8 CVEs in a real run). That is narrower than `application_security`, where AI reasoning and citation correctness were verified against 119 real findings.
+
+### Not implemented
+
+The stage tables in `CLAUDE.md` describe a target design. These parts of it do not exist: **ArgoCD / GitOps** (deploys run `helm upgrade` directly from `deploy-backend.yaml` / `deploy-frontend.yaml` — no workflow references ArgoCD), **Jira ticketing**, **Slack notifications**, the **AI Remediation Agent** (no auto-created fix PRs), and **Falco**.
+
+### Known-bad, upstream
+
+- **KubeArmor produces no policy alerts** in this environment, so `scan_status.deployed-app.kubearmor` reports `NO_SIGNAL`. Ten hypotheses were eliminated; container detection stops after startup while pod detection continues, and a `Block` policy on `/bin/ls` does not block. Environment: containerd 2.1.7, kernel 6.12.85+ COS, GKE 1.35. Full investigation in [`helm/bootstrap/README.md`](helm/bootstrap/README.md). `NO_SIGNAL` exists precisely so "the tool found nothing" cannot be read as "there is nothing to find".
+
+### Deliberate, not defects
+
+- **CloudCart's vulnerabilities are planted** and asserted as still-present by the test suites. See [`SECURITY.md`](SECURITY.md).
+- **The IDOR is intentional.** `backend/routes/identity.py` unifies where caller identity is read from and stops malformed input returning HTTP 500; it deliberately does not add authentication.
+- **No type hints anywhere** (0/114 in `scripts/`, 0/53 in `backend/`). A half-annotated tree implies a guarantee that only sometimes holds — see the conventions in `CLAUDE.md`.
+- **An unresolvable `finding_id` warns rather than fails.** Malformed ids fail schema validation and the renderer refuses to write the file; a well-formed id matching no finding renders and emits a `::warning::`, treated as a data-quality signal rather than grounds to discard an otherwise-valid report.

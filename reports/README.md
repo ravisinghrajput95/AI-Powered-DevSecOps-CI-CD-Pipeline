@@ -22,18 +22,32 @@ have no way to see what the AI Release Intelligence Engine actually outputs.
 
 ## ⚠️ Placeholders
 
-**These files are not byte-identical to the pipeline's output.** The real GCP
-project ID was replaced with `<GCP_PROJECT_ID>` in 344 places before
-committing — it appears throughout as Artifact Registry image paths:
+**These files are not byte-identical to the pipeline's output.** Two
+substitutions were made before committing:
 
-```
-us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/cloudcart-frontend/cloudcart-frontend:<sha>
-```
+1. The real GCP project ID → `<GCP_PROJECT_ID>` (344 places), appearing
+   throughout as Artifact Registry image paths:
 
-That substitution is the **only** modification. Findings, severities,
+   ```
+   us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/cloudcart-frontend/cloudcart-frontend:<sha>
+   ```
+
+2. The cluster's LoadBalancer IP → `<CLUSTER_IP>` (34 places), appearing as
+   the ZAP scan target:
+
+   ```
+   ["http://<CLUSTER_IP>/", "http://<CLUSTER_IP>/robots.txt", ...]
+   ```
+
+   That address pointed at a live, internet-facing instance of a deliberately
+   vulnerable application. Publishing it in a public repository handed anyone
+   reading this a working target, which flatly contradicts the warning at the
+   top of the main README. It should never have been committed unscrubbed.
+
+Those two substitutions are the **only** modifications. Findings, severities,
 correlations, verdict, reasoning and finding-id citations are all exactly as
 generated. If you regenerate this report yourself, expect your own project id
-in those paths.
+and your own cluster address in those places.
 
 Nothing else is redacted. The pipeline's normalizers record rule ids and
 locations rather than secret values, so no credential — including the AWS,
