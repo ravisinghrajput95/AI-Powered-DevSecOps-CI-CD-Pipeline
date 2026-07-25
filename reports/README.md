@@ -6,16 +6,22 @@ have no way to see what the AI Release Intelligence Engine actually outputs.
 
 | | |
 |---|---|
-| **Report ID** | `2972549035486c62` |
+| **Report ID** | `798bc99d23f4ea72` |
 | **Generated** | 2026-07-25 |
-| **Release** | `0b5819a` |
+| **Release** | `c4f0b85` |
 | **Model** | `claude-sonnet-4-6` |
 | **Verdict** | `DO_NOT_APPROVE` — health CRITICAL, deployment confidence LOW |
-| **Findings** | 241 across 4 domains, 9 tools |
-| **Correlations** | 7 cross-domain |
+| **Findings** | 240 across 4 domains, 9 tools |
+| **Correlations** | 5 cross-domain |
+| **Scan coverage** | **17 of 17 scanners `SUCCESS`** |
 
-Domain split: `application_security` 128, `container_security` 57,
+Domain split: `application_security` 127, `container_security` 57,
 `infrastructure_security` 32, `runtime_security` 24.
+
+Every scanner across all five components reported `SUCCESS` for this run — no
+`NOT_CONFIGURED`, no `NO_SIGNAL`, no `FAILED`. That had never happened before:
+earlier reports carried an unmeasured runtime domain, an uninstrumented syft,
+or a container scan whose status was hardcoded.
 
 ## Files
 
@@ -44,22 +50,24 @@ keys deliberately planted in this codebase — appears in the output.
 
 ## What it demonstrates
 
-**Cross-tool correlation.** The lead correlation joins Terraform's disabled
-Workload Identity (Checkov) to project-scope Owner IAM and to SSRF findings in
-application code — concluding that a container escape or SSRF from any pod
-reaches the metadata server and yields a project-Owner token. Five citations,
-three domains, three tools. No single scanner produces that sentence.
+**Cross-tool correlation.** The lead correlation joins Checkov's *static*
+Terraform finding (Workload Identity disabled, project-level Owner IAM on the
+node service account) to Kyverno's *live* runtime confirmation that
+`allowPrivilegeEscalation` is unset across 26+ workload locations — concluding
+that a container process which escalates can reach the GCE metadata server and
+turn a container breakout into full project compromise. Five citations, two
+domains, two tools, one static and one runtime. No single scanner produces
+that sentence.
 
-**Runtime evidence is real, not static analysis.** Kyverno's privilege-
-escalation violations are live admission results from the deployed cluster,
-and the report says so explicitly rather than presenting them as config
-review.
+**Runtime evidence is real, not static analysis.** Kyverno's violations are
+live admission results from the deployed cluster, scanned 0 days stale, and
+the report distinguishes them from configuration review explicitly.
 
-**Honest gaps.** `assumptions_and_unknowns` records that reachability,
-exploitability, business impact and internet exposure are **not collected**,
-that supply-chain verification returned UNKNOWN for both images, and —
-unprompted — that the infrastructure scan ran 28 days before this release,
-which the model read off the provenance block.
+**Honest gaps.** `assumptions_and_unknowns` carries 12 entries, including that
+reachability, exploitability, business impact and internet exposure are **not
+collected**, that supply-chain verification returned UNKNOWN for both images,
+and — unprompted — that the upstream scans ran at the preceding commit rather
+than this one, which the model read off the provenance block.
 
 ## Caveats, stated rather than hidden
 
@@ -73,11 +81,19 @@ which the model read off the provenance block.
   audit events less decision-relevant than confirmed OS-command injection.
   That is the reasoning layer doing its job, not a plumbing failure — but it
   means the runtime domain's weight in this report comes from Kyverno and ZAP.
-- **Those KubeArmor findings are simulated.** The runtime scan exercises the
-  audit policies during its capture window (the same active-probing model ZAP
-  uses for DAST), so a shell-execution alert reflects the pipeline's own test
-  action, not an observed intrusion. See
+- **Those KubeArmor findings are simulated, and the prompt now says so.** The
+  runtime scan exercises its own audit policies during the capture window (the
+  same active-probing model ZAP uses for DAST), so a shell-execution alert is
+  the pipeline testing its detection, not an observed intrusion. See
   [`../helm/bootstrap/README.md`](../helm/bootstrap/README.md).
+
+  This caveat exists because an earlier run got it wrong. Given the same
+  findings without that context, the model wrote that the shell execution
+  "warrants investigation as a potential active compromise indicator" — a
+  reasonable inference from the evidence it had, and false. That report was
+  discarded rather than committed, and `scripts/system_prompt.md` now states
+  the provenance of KubeArmor findings explicitly. Kyverno and ZAP are
+  deliberately excluded from the caveat and keep their full weight.
 - **`container_security` shows 57 findings.** Container scans run with no
   severity threshold, so raw artifacts hold everything;
   `--container-severity-floor` (default `high`) decides what the model reasons
