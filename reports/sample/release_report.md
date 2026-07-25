@@ -1,9 +1,9 @@
 # Release Intelligence Report
 
 **Repository:** `ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline`
-**Release Version:** `c4f0b852a3329bbde5ea78f60476d05701174931`
-**Report Generated:** 2026-07-25T14:14:15.370332+00:00
-**Report ID:** `798bc99d23f4ea72`
+**Release Version:** `2382597af3ea184f9897d9373f10bc0b59ff083d`
+**Report Generated:** 2026-07-25T14:28:38.227711+00:00
+**Report ID:** `d6af1576eadedf6c`
 **Components Assessed:** backend, frontend, deployed-app, infrastructure, terraform
 
 ---
@@ -12,297 +12,301 @@
 
 **Overall Health:** CRITICAL &nbsp;|&nbsp; **Deployment Confidence:** LOW
 
-**Dominant Risk Themes:** Privilege escalation enabled across deployed workloads, Hardcoded secrets and credentials in source code, Severely outdated frontend dependencies (axios, dompurify, lodash), Critical OS-layer CVEs in backend container image, Open firewall rules and excessive IAM privileges in infrastructure, Container image signatures unverifiable at deploy time
+**Dominant Risk Themes:** Privilege escalation enabled across deployed workloads, Unsigned container images in live cluster, Hardcoded secrets and credentials in source code, Severely outdated frontend/backend dependencies, Open firewall rules and excessive IAM privileges in infra, Critical OS-layer CVEs in deployed container images
 
-This release presents a CRITICAL security posture across all five measured domains. The application layer carries multiple high-confidence critical findings: OS command injection and path traversal in the backend, XSS in both frontend and backend, and hardcoded PostgreSQL credentials committed to source. The frontend's npm dependency tree is severely outdated — axios 0.21.1 alone accounts for 28 CVEs spanning critical HTTP Response Splitting and Prototype Pollution through dozens of high/medium issues; dompurify 2.3.3 adds 22 more CVEs including XSS bypasses. The backend container image carries critical OS-layer vulnerabilities in openssl, gnutls28, krb5, and expat that are independently exploitable regardless of application-layer controls. At the infrastructure layer, Terraform configuration exposes unrestricted SSH/RDP/MySQL firewall rules, basic IAM roles at project level (effectively full project compromise if the node SA is exposed), and a publicly accessible storage bucket. The deployed workload fails Kyverno policy enforcement on privilege escalation, run-as-root, missing seccomp profiles, and capability dropping — meaning the live cluster is operating outside its own declared security policy. Supply chain verification for both backend and frontend images returned UNKNOWN (manifest not found), so it cannot be confirmed that what is running was built and signed by the expected CI pipeline. The combination of code-level injection vulnerabilities, committed secrets, unverified images, and a live cluster running with privilege escalation enabled makes this release not suitable for production deployment without significant remediation.
+This release presents a critical security posture across all five measured domains. The most urgent concern is the live deployed-app cluster: Kyverno policy enforcement confirms that privilege escalation is not blocked on any workload (26 affected locations), containers run as root, no seccomp profiles are set, and all Linux capabilities are retained — a combination that means any container breakout or code execution vulnerability immediately yields full node-level access. Compounding this, Kyverno also confirms that deployed images lack cosign signatures and digests, meaning the supply chain integrity guarantee is absent at runtime despite both images reporting SUCCESS in the supply chain verification block — the runtime policy check reveals the deployed image digests are not pinned, which is the operative fact for deployment trust. On the application layer, SonarCloud and CodeQL confirm high-confidence injection, path traversal, XSS, and SSRF vulnerabilities in the backend, alongside four occurrences of hardcoded PostgreSQL passwords (critical, BLOCKER severity). The frontend carries two critically vulnerable npm packages — axios@0.21.1 and dompurify@2.3.3 — each accumulating dozens of CVEs across prototype pollution, HTTP response splitting, XSS, and SSRF classes; both have clear upgrade paths. The backend container image carries critical OS-layer CVEs in openssl, gnutls28, krb5, expat, and zlib — packages that are foundational to TLS and authentication. Infrastructure Terraform configuration exposes unrestricted SSH, RDP, MySQL, and FTP firewall ingress rules, grants compute Owner-level IAM at project scope, and has a publicly accessible storage bucket — any one of these would be a standalone blocker in a production environment. Workload Identity is disabled, meaning all pods inherit the node's Compute Engine service account, which holds Owner-level permissions. The combination of excessive IAM, open network perimeter, and container workloads running as root with privilege escalation enabled creates a blast radius that spans the entire GCP project. Reachability, exploitability, business impact, and internet exposure are not collected by this pipeline, which limits confidence in precise prioritization but does not change the severity of the confirmed findings.
 
 ---
 
 ## Cross-Domain Analysis
 
-### Privilege escalation: infra config gap confirmed by live runtime policy failure
+### Workload Identity disabled + Owner IAM + root containers = full project blast radius
+
+**Affected domains:** runtime_security, infrastructure_security, application_security &nbsp;|&nbsp; **Confidence:** HIGH
+
+Terraform confirms Workload Identity (GKE Metadata Server) is disabled on the node pool, and the Compute Engine default service account holds Owner-level IAM at project scope. Kyverno confirms deployed containers run as root with privilege escalation allowed and all Linux capabilities retained. Any container escape or code execution vulnerability — several of which are confirmed in the application layer — would give an attacker root on the node, access to the node's service account token, and from there Owner-level control of the entire GCP project.
+
+**Business impact:** Full GCP project compromise from a single container-level exploit. All data, infrastructure, and services in the project are at risk.
+
+**Recommended action:** Immediately enable Workload Identity on the GKE cluster and node pool, replace the Owner IAM binding with a least-privilege custom role, and enforce allowPrivilegeEscalation=false and runAsNonRoot=true on all deployed workloads. These three changes together collapse the blast radius from project-wide to container-scoped.
+
+**Evidence:** `f1f751c2ee51` (CKV_GCP_69, HIGH); `54c214b711d1` (CKV_GCP_49, CRITICAL); `0487801b1fb6` (CKV_GCP_117, CRITICAL); `f913039e3a2a` (disallow-privilege-escalation/privilege-escalation, CRITICAL); `73e307bc47c2` (disallow-privilege-escalation/autogen-privilege-escalation, CRITICAL); `55a0910c0cd3` (require-run-as-nonroot/run-as-non-root, HIGH); `79abedf3ae77` (require-run-as-nonroot/autogen-run-as-non-root, HIGH); `e9fffb850fa8` (disallow-capabilities-strict/require-drop-all, HIGH); `448a793445e1` (disallow-capabilities-strict/autogen-require-drop-all, HIGH)
+
+### Unsigned image digests at runtime undermine supply chain SUCCESS status
+
+**Affected domains:** supply_chain, runtime_security, container_security &nbsp;|&nbsp; **Confidence:** HIGH
+
+The supply_chain block reports verification_status SUCCESS for both backend and frontend images. However, Kyverno's live cosign policy check reports missing digests for the exact image references deployed in the cluster. This means the images were signed at build time but are being deployed without pinned digests — the runtime policy cannot verify the signature without a digest, making the supply chain control effectively non-functional in the live environment. The mutable :latest tag finding on the infrastructure component reinforces this pattern.
+
+**Business impact:** An attacker who can push a replacement image to the registry can deploy arbitrary code without triggering the cosign verification gate, defeating the entire supply chain integrity control.
+
+**Recommended action:** Pin all deployed image references to their full SHA256 digest (e.g. image@sha256:...) in Kubernetes manifests. Ensure the CI pipeline writes the digest output from the build/push step directly into the Helm values or manifest before deployment, so the cosign verification policy can resolve and verify the signature.
+
+**Evidence:** `f84f2db980d4` (verify-image-cosign/verify-cosign-keyless-signature, CRITICAL); `3f6606939177` (verify-image-cosign/autogen-verify-cosign-keyless-signature, CRITICAL); `6a3ccaf023bb` (latest-tag, MEDIUM)
+
+### Open firewall perimeter + public storage bucket + no network policy = flat attack surface
 
 **Affected domains:** infrastructure_security, runtime_security &nbsp;|&nbsp; **Confidence:** HIGH
 
-Terraform configuration disables Workload Identity (GKE Metadata Server not enabled) and grants the compute service account basic Owner-level IAM roles at project level. This is independently confirmed at runtime by Kyverno policy failures showing allowPrivilegeEscalation is not set to false across 26+ workload locations. Together, these mean a container process that escalates privileges can also reach the GCE metadata server and obtain the node's over-privileged service account token, turning a container escape into a full project-level compromise.
+Terraform confirms unrestricted ingress on SSH (0.0.0.0/0), RDP, MySQL, FTP, and HTTP port 80, with no master authorized networks and no Kubernetes NetworkPolicy. A public Cloud Storage bucket with no access prevention enforcement compounds this. The cluster has no VPC flow logs or intranode visibility, meaning lateral movement within the cluster would be undetected. Together these findings describe a network perimeter with no meaningful segmentation at any layer.
 
-**Business impact:** A single container breakout could yield full GCP project access, including all storage, databases, and compute resources.
+**Business impact:** Any internet-accessible service or misconfigured workload can be reached directly. Lateral movement within the cluster is unconstrained and undetected. Data in the public storage bucket is accessible to anyone.
 
-**Recommended action:** Enable Workload Identity on the GKE cluster and node pool, replace the basic Owner IAM role with a least-privilege custom role, and set allowPrivilegeEscalation: false in all container securityContexts.
+**Recommended action:** Restrict all firewall rules to specific source CIDRs; remove or scope the allow_all rule. Enable Kubernetes NetworkPolicy and master authorized networks. Set public access prevention to enforced on the storage bucket. Enable VPC flow logs for audit visibility.
 
-**Evidence:** `f1f751c2ee51` (CKV_GCP_69, HIGH); `54c214b711d1` (CKV_GCP_49, CRITICAL); `0487801b1fb6` (CKV_GCP_117, CRITICAL); `f913039e3a2a` (disallow-privilege-escalation/privilege-escalation, CRITICAL); `73e307bc47c2` (disallow-privilege-escalation/autogen-privilege-escalation, CRITICAL)
+**Evidence:** `3ba928b4fd97` (CKV_GCP_88, CRITICAL); `dbbdc1cf61c2` (CKV_GCP_2, CRITICAL); `57df84a4027d` (CKV_GCP_3, CRITICAL); `189191849e41` (CKV_GCP_114, CRITICAL); `7a97a533c5a2` (CKV_GCP_12, MEDIUM); `0d8acda49a79` (CKV_GCP_20, MEDIUM); `8d32bd1d8e72` (CKV_GCP_61, MEDIUM); `53953124a35c` (CKV_GCP_23, MEDIUM); `be6a83a66fe7` (CKV_GCP_106, MEDIUM)
 
-### Unsigned/unverifiable images compound all container-layer CVE risk
+### Hardcoded secrets in source confirmed by three independent tools
 
-**Affected domains:** supply_chain, container_security, runtime_security &nbsp;|&nbsp; **Confidence:** HIGH
+**Affected domains:** application_security, infrastructure_security &nbsp;|&nbsp; **Confidence:** HIGH
 
-Supply chain verification for both backend and frontend images returned UNKNOWN — the release commit SHA was not found in Artifact Registry. Simultaneously, Kyverno's image signature verification policy is actively failing in the live cluster for the frontend image. This means there is no cryptographic assurance that the running images correspond to the CI-built artifacts that were scanned. The extensive container-layer CVE findings (critical openssl, gnutls28, krb5, expat in backend; nginx, libssh2, aom in frontend) were assessed against images whose provenance cannot be confirmed.
+SonarCloud (critical BLOCKER), CodeQL, and GitGuardian independently confirm hardcoded PostgreSQL passwords and a SECRET_KEY in the backend source. GitGuardian also detects username/password credentials in both frontend and backend. The SonarCloud finding has occurrence_count 4, indicating the credential appears in multiple locations. These are not theoretical — three tools with different detection mechanisms all agree, giving very high confidence the secrets are real and present in the repository.
 
-**Business impact:** If an attacker substituted a malicious image, the container-layer CVE scan results would be meaningless and the actual attack surface unknown.
+**Business impact:** Any developer, CI runner, or attacker with repository read access can extract live database credentials. If the PostgreSQL instance is reachable (the open firewall rules make this plausible), direct database compromise is possible without any application-layer exploit.
 
-**Recommended action:** Resolve the Artifact Registry manifest lookup failure (confirm the image was pushed with the correct tag/digest), ensure the cosign signing step ran successfully in CI for this exact digest, and fix the Kyverno image verification policy's registry access permissions.
+**Recommended action:** Immediately rotate all exposed credentials (PostgreSQL password, SECRET_KEY, any username/password pairs). Remove them from source history (git filter-repo or BFG). Load secrets at runtime from a secret manager (GCP Secret Manager or Kubernetes Secrets with appropriate RBAC). Block future commits containing secrets via a pre-commit hook and GitGuardian's push protection.
 
-**Evidence:** `f84f2db980d4` (verify-image-cosign/verify-cosign-keyless-signature, CRITICAL); `3f6606939177` (verify-image-cosign/autogen-verify-cosign-keyless-signature, CRITICAL); `80c766bd7abd` (SNYK-DEBIAN12-OPENSSL-15969314, CRITICAL); `9aeed721127a` (SNYK-DEBIAN12-GNUTLS28-16344303, CRITICAL); `903cec21ca4e` (SNYK-DEBIAN12-GNUTLS28-16344325, CRITICAL); `971307a2fb61` (SNYK-DEBIAN12-KRB5-7411315, CRITICAL)
+**Evidence:** `049991827bea` (secrets:S6698, CRITICAL); `45577584570d` (Generic Password, MEDIUM); `00af2baa5ff3` (Username Password, MEDIUM); `ba3dc970c4bd` (python:S2068, MEDIUM); `0ad3628d28ea` (Generic Password, MEDIUM); `878a66ae7816` (Username Password, MEDIUM)
 
-### Hardcoded secrets in source code span application and container layers
+### Backend code injection vulnerabilities amplified by Flask debug mode and insecure TLS
+
+**Affected domains:** application_security, runtime_security &nbsp;|&nbsp; **Confidence:** HIGH
+
+SonarCloud (critical BLOCKER) and CodeQL both independently confirm OS command injection and path traversal in the backend. CodeQL additionally confirms SQL injection and SSRF. Flask debug mode is confirmed enabled (CodeQL medium, SonarCloud low), which exposes an interactive debugger that allows arbitrary Python code execution if triggered. TLS certificate validation is disabled in two locations. The combination means an attacker who reaches the backend can execute OS commands, traverse the filesystem, query the database directly, and do so over connections that cannot be authenticated by the server.
+
+**Business impact:** Remote code execution on the backend container, with direct database access and the ability to pivot to the GCP metadata service (amplified by disabled Workload Identity controls).
+
+**Recommended action:** Remediate injection vulnerabilities (parameterized queries, subprocess with argument lists, path allowlisting) before deployment. Disable Flask debug mode via environment-specific configuration. Enable TLS certificate validation unconditionally.
+
+**Evidence:** `688d20fa838a` (pythonsecurity:S2076, CRITICAL); `447335a06a0f` (pythonsecurity:S2083, CRITICAL); `6f568715650c` (py/command-line-injection, MEDIUM); `757685f73438` (py/sql-injection, MEDIUM); `217911839f44` (py/flask-debug, MEDIUM); `0c9c83aacaa9` (docker:S4507, LOW); `95abf401b56f` (python:S4830, HIGH); `ff32e3378a60` (py/full-ssrf, MEDIUM); `37c28065d914` (pythonsecurity:S5144, MEDIUM)
+
+### Severely outdated npm packages (axios, dompurify) drive frontend critical CVE cluster
 
 **Affected domains:** application_security, container_security &nbsp;|&nbsp; **Confidence:** HIGH
 
-SonarCloud detected a hardcoded PostgreSQL password (critical, high confidence) and a SECRET_KEY in the backend source. GitGuardian independently confirmed Username/Password and Generic Password patterns across both backend and frontend. These secrets are committed to the repository and will be baked into any container image built from this source, meaning they persist in image layers even if removed from the working tree. The backend container also runs with a writable root filesystem and without a read-only mount, making runtime secret extraction easier.
+axios@0.21.1 accumulates 28 findings (2 critical, multiple high/medium) spanning prototype pollution, HTTP response splitting, SSRF, CSRF, and ReDoS. dompurify@2.3.3 accumulates 22 findings (1 critical, multiple high/medium) spanning XSS, prototype pollution, and template injection — directly undermining the library's core purpose of sanitizing HTML. Both have clear upgrade paths documented in remediation_notes. SonarCloud independently confirms an XSS vulnerability in the frontend JS code, meaning the application layer compounds the dependency-layer XSS risk.
 
-**Business impact:** Committed credentials provide direct database access to anyone with repository read access, and persist in container image history.
+**Business impact:** Client-side code execution, credential theft, CSRF, and SSRF from the frontend. The dompurify vulnerabilities are particularly high-impact because the library is specifically used to prevent XSS — its compromise means the XSS defense layer is absent.
 
-**Recommended action:** Immediately rotate all exposed credentials, remove them from source history (git filter-repo), load secrets from a secret manager at runtime, and set readOnlyRootFilesystem: true on all containers.
+**Recommended action:** Upgrade axios to >=1.16.0 (or >=0.32.0 for the 0.x line) and dompurify to >=3.4.12 to resolve all known CVEs in a single upgrade per package. Also upgrade lodash to >=4.18.1 and moment to >=2.29.4. Add npm audit to the CI gate to prevent regression.
 
-**Evidence:** `049991827bea` (secrets:S6698, CRITICAL); `ba3dc970c4bd` (python:S2068, MEDIUM); `00af2baa5ff3` (Username Password, MEDIUM); `45577584570d` (Generic Password, MEDIUM); `0ad3628d28ea` (Generic Password, MEDIUM); `878a66ae7816` (Username Password, MEDIUM); `7bb35e743f73` (no-read-only-root-fs, MEDIUM)
+**Evidence:** `0dc16d7ed2e9` (SNYK-JS-AXIOS-16298058, CRITICAL); `a7b165255456` (SNYK-JS-AXIOS-16299904, CRITICAL); `82d7f2881d4c` (SNYK-JS-DOMPURIFY-8318045, CRITICAL); `6751a218019c` (jssecurity:S5696, CRITICAL); `472ae7a3640e` (SNYK-JS-AXIOS-15252993, HIGH); `301f4d9e8a0f` (SNYK-JS-AXIOS-1579269, HIGH); `afac6e0ca60a` (SNYK-JS-AXIOS-15969258, HIGH); `9eda1fcf005c` (SNYK-JS-DOMPURIFY-7984421, HIGH)
 
-### Open firewall rules and missing network policy create unrestricted lateral movement surface
+### Critical OS-layer CVEs in backend container image on live cryptographic and auth libraries
 
-**Affected domains:** infrastructure_security, runtime_security &nbsp;|&nbsp; **Confidence:** HIGH
+**Affected domains:** container_security, application_security &nbsp;|&nbsp; **Confidence:** HIGH
 
-Terraform defines a google_compute_firewall.allow_all rule permitting unrestricted SSH, RDP, MySQL, FTP, and HTTP ingress from 0.0.0.0/0. At the cluster level, no Kubernetes NetworkPolicy is configured (missing-pod-isolation finding), and master authorized networks are not enabled. This means both the GCP network perimeter and the Kubernetes pod network are fully open, allowing any internet host to attempt SSH/RDP against nodes and any pod to reach any other pod.
+The backend container image carries critical CVEs in openssl (4 occurrences), gnutls28 (2 critical CVEs), krb5 (critical, 11 occurrences), expat (2 critical), and zlib (critical, 5 occurrences). These are foundational system libraries used for TLS, Kerberos authentication, and XML parsing — not peripheral utilities. The application-layer finding of disabled TLS certificate validation (insecure-tls) means the application is already not fully leveraging TLS integrity, and the underlying TLS library itself is vulnerable.
 
-**Business impact:** Unrestricted ingress enables direct brute-force or exploitation of node services; absence of NetworkPolicy means a compromised pod can reach all other workloads.
+**Business impact:** Cryptographic library vulnerabilities in a live container can enable TLS interception, authentication bypass, and memory corruption attacks against the backend service. Combined with the application-layer TLS misconfiguration, the end-to-end security of all backend communications is compromised.
 
-**Recommended action:** Replace the allow_all firewall rule with specific rules scoped to required ports and known CIDR ranges; enable master authorized networks; add Kubernetes NetworkPolicies to restrict pod-to-pod traffic to declared service dependencies only.
+**Recommended action:** Rebuild the backend container image from an updated Debian 12 base image (or use a minimal distroless base). Upgrade openssl, gnutls28, krb5, expat, and zlib to their patched versions as documented in remediation_notes. Integrate container image scanning into the CI pipeline as a blocking gate.
 
-**Evidence:** `dbbdc1cf61c2` (CKV_GCP_2, CRITICAL); `3ba928b4fd97` (CKV_GCP_88, CRITICAL); `57df84a4027d` (CKV_GCP_3, CRITICAL); `382c6fe86e55` (CKV_GCP_77, HIGH); `7a97a533c5a2` (CKV_GCP_12, MEDIUM); `0d8acda49a79` (CKV_GCP_20, MEDIUM)
-
-### Application-layer injection vulnerabilities confirmed by multiple independent tools
-
-**Affected domains:** application_security &nbsp;|&nbsp; **Confidence:** HIGH
-
-OS command injection is flagged by both SonarCloud (critical, BLOCKER) and CodeQL (medium, command-line-injection) in the backend. Path traversal is flagged by both SonarCloud (critical, 4 occurrences) and CodeQL (medium, 4 occurrences). SQL injection is flagged by CodeQL. XSS is flagged by SonarCloud in both backend and frontend, and independently by CodeQL (reflective XSS, bad-tag-filter). Cross-tool confirmation at different confidence levels on the same root causes significantly increases the credibility of these findings.
-
-**Business impact:** Exploitable injection vulnerabilities in a deployed backend can lead to remote code execution, data exfiltration, and full application compromise.
-
-**Recommended action:** Prioritize remediation of the OS command injection and SQL injection findings immediately; use parameterized queries, avoid shell construction from user input, and apply output encoding for all user-controlled data rendered in HTML/JS.
-
-**Evidence:** `688d20fa838a` (pythonsecurity:S2076, CRITICAL); `6f568715650c` (py/command-line-injection, MEDIUM); `447335a06a0f` (pythonsecurity:S2083, CRITICAL); `9de17c0300aa` (py/path-injection, MEDIUM); `757685f73438` (py/sql-injection, MEDIUM); `b554580125be` (pythonsecurity:S5131, CRITICAL); `6751a218019c` (jssecurity:S5696, CRITICAL); `4825cf439910` (py/reflective-xss, MEDIUM)
+**Evidence:** `80c766bd7abd` (SNYK-DEBIAN12-OPENSSL-15969314, CRITICAL); `9aeed721127a` (SNYK-DEBIAN12-GNUTLS28-16344303, CRITICAL); `903cec21ca4e` (SNYK-DEBIAN12-GNUTLS28-16344325, CRITICAL); `971307a2fb61` (SNYK-DEBIAN12-KRB5-7411315, CRITICAL); `083d9d82d66b` (SNYK-DEBIAN12-ZLIB-6008963, CRITICAL); `406f0f4dac9b` (SNYK-DEBIAN12-EXPAT-7855502, CRITICAL); `afabe834cfa4` (SNYK-DEBIAN12-EXPAT-7855503, CRITICAL); `95abf401b56f` (python:S4830, HIGH)
 
 ---
 
 ## Top Risks
 
-### Risk 1: OS command injection and SQL injection in deployed backend
+### Risk 1: Privilege escalation + root containers + Owner IAM = full GCP project compromise path
 
 **Confidence:** HIGH
 
-**Impact:** Remote code execution and data exfiltration from the live backend service.
+**Impact:** A single exploitable vulnerability in any deployed container (several confirmed at critical/high severity) can yield root on the node, access to the node's Compute Engine service account with Owner-level IAM, and full control of the GCP project — all data, infrastructure, and services.
 
-**Why it matters:** Command injection confirmed at critical severity by SonarCloud and corroborated by CodeQL; SQL injection confirmed by CodeQL. These are directly exploitable via the application's HTTP interface with no prerequisite access. The backend is deployed and reachable.
+**Why it matters:** This is not a theoretical chain: each link is confirmed by a separate tool at high confidence. Kyverno confirms privilege escalation is allowed and containers run as root in the live cluster. Checkov confirms the node pool lacks Workload Identity and the service account holds Owner IAM. Application-layer tools confirm multiple exploitable injection and code execution vulnerabilities. The blast radius is the entire GCP project.
 
-**Recommended action:** Immediately audit and remediate all code paths constructing OS commands or SQL queries from user input; use parameterized queries and subprocess argument lists (never shell=True with user data).
+**Recommended action:** Block deployment until: (1) allowPrivilegeEscalation=false and runAsNonRoot=true are enforced on all workloads, (2) Workload Identity is enabled and the node pool's service account is replaced with a least-privilege identity, (3) the Owner IAM binding is removed and replaced with a scoped role.
 
-**Evidence:** `688d20fa838a` (pythonsecurity:S2076, CRITICAL); `6f568715650c` (py/command-line-injection, MEDIUM); `757685f73438` (py/sql-injection, MEDIUM)
+**Evidence:** `f913039e3a2a` (disallow-privilege-escalation/privilege-escalation, CRITICAL); `73e307bc47c2` (disallow-privilege-escalation/autogen-privilege-escalation, CRITICAL); `55a0910c0cd3` (require-run-as-nonroot/run-as-non-root, HIGH); `79abedf3ae77` (require-run-as-nonroot/autogen-run-as-non-root, HIGH); `f1f751c2ee51` (CKV_GCP_69, HIGH); `54c214b711d1` (CKV_GCP_49, CRITICAL); `0487801b1fb6` (CKV_GCP_117, CRITICAL); `688d20fa838a` (pythonsecurity:S2076, CRITICAL); `447335a06a0f` (pythonsecurity:S2083, CRITICAL)
 
-### Risk 2: Hardcoded PostgreSQL password and SECRET_KEY committed to source
-
-**Confidence:** HIGH
-
-**Impact:** Direct database compromise and session/token forgery for anyone with repository read access.
-
-**Why it matters:** Critical-severity, high-confidence finding from SonarCloud with 4 occurrences of the PostgreSQL password pattern. Independently corroborated by GitGuardian across both components. Credentials baked into source are also baked into container image layers.
-
-**Recommended action:** Rotate all exposed credentials immediately, purge from git history, and inject secrets at runtime via a secret manager (e.g. GCP Secret Manager, Kubernetes Secrets with external-secrets-operator).
-
-**Evidence:** `049991827bea` (secrets:S6698, CRITICAL); `ba3dc970c4bd` (python:S2068, MEDIUM); `00af2baa5ff3` (Username Password, MEDIUM); `45577584570d` (Generic Password, MEDIUM)
-
-### Risk 3: Privilege escalation enabled across all deployed workloads
+### Risk 2: Hardcoded PostgreSQL credentials confirmed by three independent tools
 
 **Confidence:** HIGH
 
-**Impact:** Any container process can gain elevated privileges, enabling container escape and lateral movement to the over-privileged node service account.
+**Impact:** Live database credentials are present in the repository and accessible to anyone with read access. If the database is reachable (open firewall rules make this plausible), direct database compromise is possible without any application exploit.
 
-**Why it matters:** Kyverno policy enforcement is actively failing for allowPrivilegeEscalation across 26+ workload locations in the live cluster. Combined with Workload Identity being disabled and the node SA holding basic Owner IAM role, privilege escalation leads directly to full GCP project compromise.
+**Why it matters:** SonarCloud (critical BLOCKER, 4 occurrences), CodeQL, and GitGuardian all independently confirm the same class of finding. Three-tool agreement at high confidence eliminates false-positive risk. The open MySQL firewall rule (0.0.0.0/0) means the database may be directly internet-accessible with these credentials.
 
-**Recommended action:** Set allowPrivilegeEscalation: false in all container securityContexts immediately; enable Workload Identity on the cluster; replace the basic Owner IAM role with a least-privilege role.
+**Recommended action:** Rotate all exposed credentials immediately. Remove from source history. Load secrets from GCP Secret Manager at runtime. Close the unrestricted MySQL firewall rule. These actions are independent of the deployment decision and should happen now regardless.
 
-**Evidence:** `f913039e3a2a` (disallow-privilege-escalation/privilege-escalation, CRITICAL); `73e307bc47c2` (disallow-privilege-escalation/autogen-privilege-escalation, CRITICAL); `f1f751c2ee51` (CKV_GCP_69, HIGH); `54c214b711d1` (CKV_GCP_49, CRITICAL); `0487801b1fb6` (CKV_GCP_117, CRITICAL)
+**Evidence:** `049991827bea` (secrets:S6698, CRITICAL); `3ba928b4fd97` (CKV_GCP_88, CRITICAL); `45577584570d` (Generic Password, MEDIUM); `00af2baa5ff3` (Username Password, MEDIUM); `ba3dc970c4bd` (python:S2068, MEDIUM)
 
-### Risk 4: Critical OS-layer CVEs in backend container image (openssl, gnutls28, krb5, expat)
-
-**Confidence:** HIGH
-
-**Impact:** Exploitable vulnerabilities in core cryptographic and parsing libraries present in the running backend container.
-
-**Why it matters:** Multiple critical CVEs in openssl (CVE-2026-31789), gnutls28 (CVE-2026-42010, CVE-2026-33845), krb5 (CVE-2024-37371), and expat (CVE-2024-45491/45492) are present in the backend image. These are OS-layer packages used by many application components and are independently exploitable. Image provenance is UNKNOWN, so the actual running image may differ from what was scanned.
-
-**Recommended action:** Rebuild the backend container from an updated base image with patched OS packages; establish a regular base image update cadence and automate OS-layer vulnerability scanning as a build gate.
-
-**Evidence:** `80c766bd7abd` (SNYK-DEBIAN12-OPENSSL-15969314, CRITICAL); `9aeed721127a` (SNYK-DEBIAN12-GNUTLS28-16344303, CRITICAL); `903cec21ca4e` (SNYK-DEBIAN12-GNUTLS28-16344325, CRITICAL); `971307a2fb61` (SNYK-DEBIAN12-KRB5-7411315, CRITICAL); `406f0f4dac9b` (SNYK-DEBIAN12-EXPAT-7855502, CRITICAL); `afabe834cfa4` (SNYK-DEBIAN12-EXPAT-7855503, CRITICAL)
-
-### Risk 5: Container image signatures unverifiable; Kyverno image policy actively failing
+### Risk 3: Unsigned/unverified container images deployed to live cluster
 
 **Confidence:** HIGH
 
-**Impact:** No cryptographic assurance that deployed images were built by the expected CI pipeline; supply chain substitution cannot be detected.
+**Impact:** The cosign image verification policy is non-functional at runtime because deployed images lack pinned digests. An attacker with registry write access can substitute a malicious image without triggering any verification gate.
 
-**Why it matters:** Both backend and frontend supply_chain.verification_status is UNKNOWN (manifest not found in Artifact Registry). Kyverno's cosign keyless signature verification policy is actively failing in the live cluster for the frontend image, and the error indicates an Artifact Registry permission denial. This means the image verification control is non-functional.
+**Why it matters:** The supply_chain block reports SUCCESS, but Kyverno's live policy check reveals the deployed image references are missing digests — the verification cannot succeed without a digest to resolve the signature against. This is a runtime fact that overrides the build-time status. The mutable :latest tag finding confirms the root cause.
 
-**Recommended action:** Resolve the Artifact Registry IAM permission for the Kyverno service account; confirm the cosign signing step ran for the exact deployed digest; investigate why the release SHA is not found in the registry.
+**Recommended action:** Pin all deployed image references to their SHA256 digest. Update CI to write the digest into manifests/Helm values at build time. Verify the Kyverno cosign policy passes before considering the supply chain control effective.
 
-**Evidence:** `f84f2db980d4` (verify-image-cosign/verify-cosign-keyless-signature, CRITICAL); `3f6606939177` (verify-image-cosign/autogen-verify-cosign-keyless-signature, CRITICAL)
+**Evidence:** `f84f2db980d4` (verify-image-cosign/verify-cosign-keyless-signature, CRITICAL); `3f6606939177` (verify-image-cosign/autogen-verify-cosign-keyless-signature, CRITICAL); `6a3ccaf023bb` (latest-tag, MEDIUM)
 
-### Risk 6: Unrestricted firewall rules expose SSH, RDP, MySQL, and FTP to the internet
-
-**Confidence:** HIGH
-
-**Impact:** Direct internet-accessible attack surface on node management ports and database services.
-
-**Why it matters:** google_compute_firewall.allow_all permits 0.0.0.0/0 ingress on SSH (critical), RDP (critical), MySQL (critical), and FTP (high) ports. These are the highest-value targets for automated internet scanning and brute-force attacks.
-
-**Recommended action:** Replace allow_all with specific firewall rules scoped to required source CIDRs; remove SSH/RDP/MySQL/FTP from public ingress entirely and use IAP or VPN for administrative access.
-
-**Evidence:** `dbbdc1cf61c2` (CKV_GCP_2, CRITICAL); `3ba928b4fd97` (CKV_GCP_88, CRITICAL); `57df84a4027d` (CKV_GCP_3, CRITICAL); `382c6fe86e55` (CKV_GCP_77, HIGH); `e5f32d7b4723` (CKV_GCP_75, HIGH)
-
-### Risk 7: Frontend axios 0.21.1 carries 28 CVEs including critical HTTP Response Splitting and Prototype Pollution
+### Risk 4: Backend OS command injection and path traversal confirmed at critical severity
 
 **Confidence:** HIGH
 
-**Impact:** Client-side request manipulation, prototype pollution enabling logic bypass, and sensitive data leakage in the frontend application.
+**Impact:** Attackers can execute arbitrary OS commands and traverse the filesystem on the backend container. Combined with Flask debug mode being enabled, this can escalate to interactive remote code execution.
 
-**Why it matters:** A single package upgrade resolves 28 CVEs spanning critical through medium severity. The package is severely outdated (0.21.1 vs. current 1.x series). Critical CVEs include HTTP Response Splitting (CVE-2026-42035) and Prototype Pollution (CVE-2026-42033).
+**Why it matters:** SonarCloud rates these BLOCKER (critical) with high confidence. CodeQL independently confirms command-line injection and path injection. Two tools, same root cause, high confidence — this is not a scanner artifact. Flask debug mode (confirmed by CodeQL) provides an interactive Python debugger that turns any unhandled exception into a code execution primitive.
 
-**Recommended action:** Upgrade axios to 1.18.0 or later (resolves all known CVEs in the finding set); pin the version in package.json and lock with package-lock.json.
+**Recommended action:** Remediate injection vulnerabilities using parameterized inputs and path allowlisting before deployment. Disable Flask debug mode via environment configuration. These are blocking issues for production deployment.
 
-**Evidence:** `0dc16d7ed2e9` (SNYK-JS-AXIOS-16298058, CRITICAL); `a7b165255456` (SNYK-JS-AXIOS-16299904, CRITICAL); `472ae7a3640e` (SNYK-JS-AXIOS-15252993, HIGH); `301f4d9e8a0f` (SNYK-JS-AXIOS-1579269, HIGH); `21c208e62117` (SNYK-JS-AXIOS-17111062, HIGH)
+**Evidence:** `688d20fa838a` (pythonsecurity:S2076, CRITICAL); `447335a06a0f` (pythonsecurity:S2083, CRITICAL); `6f568715650c` (py/command-line-injection, MEDIUM); `9de17c0300aa` (py/path-injection, MEDIUM); `217911839f44` (py/flask-debug, MEDIUM); `0c9c83aacaa9` (docker:S4507, LOW)
 
-### Risk 8: XSS vulnerabilities in both backend and frontend confirmed by multiple tools
+### Risk 5: Open firewall rules expose SSH, RDP, MySQL, and FTP to 0.0.0.0/0
 
 **Confidence:** HIGH
 
-**Impact:** Arbitrary JavaScript execution in user browsers, enabling session hijacking, credential theft, and malicious redirects.
+**Impact:** The GCP compute firewall allows unrestricted internet access to SSH, RDP, MySQL, FTP, and HTTP port 80. Any service or database listening on these ports is directly internet-accessible.
 
-**Why it matters:** Backend XSS confirmed at critical severity by SonarCloud and corroborated by CodeQL. Frontend XSS confirmed at critical severity by SonarCloud. dompurify 2.3.3 (the library intended to prevent XSS) itself carries multiple XSS CVEs, undermining the sanitization layer.
+**Why it matters:** Checkov confirms these at critical and high severity with high confidence. The MySQL exposure is directly correlated with the hardcoded database credentials (RISK-002) — together they represent a direct path to database compromise from the internet. The SSH/RDP exposure means any credential leak or brute-force attack can yield node-level access.
 
-**Recommended action:** Apply output encoding for all user-controlled data in templates; upgrade dompurify to 3.4.12 or later; audit all innerHTML/dangerouslySetInnerHTML usages.
+**Recommended action:** Restrict all firewall source_ranges to specific known CIDR blocks. Remove or replace the allow_all rule. Scope allow blocks to only required ports. This is a blocking infrastructure change.
 
-**Evidence:** `b554580125be` (pythonsecurity:S5131, CRITICAL); `6751a218019c` (jssecurity:S5696, CRITICAL); `4825cf439910` (py/reflective-xss, MEDIUM); `82d7f2881d4c` (SNYK-JS-DOMPURIFY-8318045, CRITICAL); `872764e9621e` (SNYK-JS-DOMPURIFY-8184974, MEDIUM)
+**Evidence:** `3ba928b4fd97` (CKV_GCP_88, CRITICAL); `dbbdc1cf61c2` (CKV_GCP_2, CRITICAL); `57df84a4027d` (CKV_GCP_3, CRITICAL); `382c6fe86e55` (CKV_GCP_77, HIGH); `e5f32d7b4723` (CKV_GCP_75, HIGH); `be6a83a66fe7` (CKV_GCP_106, MEDIUM)
+
+### Risk 6: Frontend axios@0.21.1 and dompurify@2.3.3 carry critical CVEs with clear upgrade paths
+
+**Confidence:** HIGH
+
+**Impact:** axios carries 2 critical CVEs (HTTP response splitting, prototype pollution) and 8+ high CVEs. dompurify — the library specifically used to prevent XSS — carries 1 critical CVE (prototype pollution) and multiple high/medium XSS CVEs, meaning the XSS defense layer is itself compromised.
+
+**Why it matters:** Both packages have documented fixed versions. Upgrading axios to >=1.16.0 and dompurify to >=3.4.12 resolves all known CVEs in each package in a single operation. The risk of not upgrading is concrete: a compromised XSS sanitizer in a web application is a direct path to client-side code execution.
+
+**Recommended action:** Upgrade axios to >=1.16.0 and dompurify to >=3.4.12. Also upgrade lodash to >=4.18.1 and moment to >=2.29.4. These are application-layer changes with low deployment risk and high security return.
+
+**Evidence:** `0dc16d7ed2e9` (SNYK-JS-AXIOS-16298058, CRITICAL); `a7b165255456` (SNYK-JS-AXIOS-16299904, CRITICAL); `82d7f2881d4c` (SNYK-JS-DOMPURIFY-8318045, CRITICAL); `9eda1fcf005c` (SNYK-JS-DOMPURIFY-7984421, HIGH); `472ae7a3640e` (SNYK-JS-AXIOS-15252993, HIGH); `6751a218019c` (jssecurity:S5696, CRITICAL)
+
+### Risk 7: Critical OS-layer CVEs in backend container image on TLS and auth libraries
+
+**Confidence:** HIGH
+
+**Impact:** The backend container image runs with critical vulnerabilities in openssl, gnutls28, krb5, expat, and zlib — libraries that underpin all TLS connections and Kerberos authentication. Memory corruption and authentication bypass are confirmed vulnerability classes.
+
+**Why it matters:** These are not application-layer dependencies that can be patched in requirements.txt — they are OS-layer packages in the container base image. The application-layer finding of disabled TLS certificate validation means the application is already not fully leveraging TLS integrity, and the underlying library is also vulnerable. Patched versions exist for all affected packages.
+
+**Recommended action:** Rebuild the backend container from an updated Debian 12 base image with patched system packages. Consider migrating to a distroless or minimal base image to reduce the OS-layer attack surface. Add container image scanning as a CI blocking gate.
+
+**Evidence:** `80c766bd7abd` (SNYK-DEBIAN12-OPENSSL-15969314, CRITICAL); `9aeed721127a` (SNYK-DEBIAN12-GNUTLS28-16344303, CRITICAL); `903cec21ca4e` (SNYK-DEBIAN12-GNUTLS28-16344325, CRITICAL); `971307a2fb61` (SNYK-DEBIAN12-KRB5-7411315, CRITICAL); `083d9d82d66b` (SNYK-DEBIAN12-ZLIB-6008963, CRITICAL); `406f0f4dac9b` (SNYK-DEBIAN12-EXPAT-7855502, CRITICAL); `afabe834cfa4` (SNYK-DEBIAN12-EXPAT-7855503, CRITICAL)
+
+### Risk 8: Public Cloud Storage bucket with no access prevention or access logging
+
+**Confidence:** HIGH
+
+**Impact:** The GCS bucket has public access prevention not enforced and uniform bucket-level access disabled, meaning objects can be made publicly accessible via legacy per-object ACLs. Access is not logged, so any data exfiltration would be undetected.
+
+**Why it matters:** Checkov confirms both the public access prevention gap (critical) and the missing access logging (medium) at high confidence. Without access logging, there is no audit trail for data access. Without access prevention enforcement, a single misconfigured object ACL exposes data publicly.
+
+**Recommended action:** Set public_access_prevention = enforced and enable uniform_bucket_level_access on the storage bucket. Configure a logging block pointing to a separate log-sink bucket. These are Terraform changes with no application impact.
+
+**Evidence:** `189191849e41` (CKV_GCP_114, CRITICAL); `724685b547f7` (CKV_GCP_29, HIGH); `354070e54e2f` (CKV_GCP_62, MEDIUM)
 
 ---
 
 ## Highest Priority Actions
 
-### Action 1: Rotate and externalize all hardcoded credentials (PostgreSQL password, SECRET_KEY)
+### Action 1: Rotate all hardcoded credentials and remove from source history
 
 **Estimated complexity:** MEDIUM &nbsp;|&nbsp; **Dependencies:** none
 
-Committed credentials are immediately exploitable by anyone with repository access and persist in container image layers. This is the highest-urgency action because it requires no code change to exploit and the blast radius includes the database.
+Three independent tools confirm live database credentials and a SECRET_KEY are present in the repository. This action is independent of the deployment decision and must happen immediately — the credentials are already exposed regardless of whether this release deploys.
 
-**Expected risk reduction:** Eliminates direct database compromise risk from credential exposure; removes RISK-002 and reduces CORR-003.
+**Expected risk reduction:** Eliminates direct database compromise risk from credential exposure. Removes the most immediately actionable attack vector.
 
-**Evidence:** `049991827bea` (secrets:S6698, CRITICAL); `ba3dc970c4bd` (python:S2068, MEDIUM); `00af2baa5ff3` (Username Password, MEDIUM); `45577584570d` (Generic Password, MEDIUM); `0ad3628d28ea` (Generic Password, MEDIUM); `878a66ae7816` (Username Password, MEDIUM)
+**Evidence:** `049991827bea` (secrets:S6698, CRITICAL); `45577584570d` (Generic Password, MEDIUM); `00af2baa5ff3` (Username Password, MEDIUM); `ba3dc970c4bd` (python:S2068, MEDIUM); `0ad3628d28ea` (Generic Password, MEDIUM); `878a66ae7816` (Username Password, MEDIUM)
 
-### Action 2: Remediate OS command injection and SQL injection in backend
-
-**Estimated complexity:** MEDIUM &nbsp;|&nbsp; **Dependencies:** none
-
-Critical-severity, high-confidence, cross-tool confirmed injection vulnerabilities in a deployed service represent the most direct path to remote code execution. Must be fixed before any production traffic is served.
-
-**Expected risk reduction:** Eliminates RISK-001; removes the highest-severity application-layer attack vector.
-
-**Evidence:** `688d20fa838a` (pythonsecurity:S2076, CRITICAL); `6f568715650c` (py/command-line-injection, MEDIUM); `757685f73438` (py/sql-injection, MEDIUM); `447335a06a0f` (pythonsecurity:S2083, CRITICAL); `9de17c0300aa` (py/path-injection, MEDIUM)
-
-### Action 3: Set allowPrivilegeEscalation: false and runAsNonRoot: true on all container securityContexts
+### Action 2: Enforce allowPrivilegeEscalation=false, runAsNonRoot=true, and drop ALL capabilities on all deployed workloads
 
 **Estimated complexity:** LOW &nbsp;|&nbsp; **Dependencies:** none
 
-Live Kyverno policy enforcement is failing across 26+ workload locations. Combined with disabled Workload Identity and over-privileged node SA, this is the shortest path from container process to full GCP project compromise.
+Kyverno confirms these controls are absent across all deployed workloads (26 locations for the autogen rules). These are securityContext fields that can be set without application code changes. They are the primary control preventing container-level exploits from escalating to node-level access.
 
-**Expected risk reduction:** Eliminates RISK-003; breaks the privilege escalation chain described in CORR-001.
+**Expected risk reduction:** Collapses the blast radius of any container-level exploit from node-wide to container-scoped. Directly addresses RISK-001 and CORR-001.
 
-**Evidence:** `f913039e3a2a` (disallow-privilege-escalation/privilege-escalation, CRITICAL); `73e307bc47c2` (disallow-privilege-escalation/autogen-privilege-escalation, CRITICAL); `55a0910c0cd3` (require-run-as-nonroot/run-as-non-root, HIGH); `79abedf3ae77` (require-run-as-nonroot/autogen-run-as-non-root, HIGH); `a37e4f16b0ef` (run-as-non-root, HIGH)
+**Evidence:** `f913039e3a2a` (disallow-privilege-escalation/privilege-escalation, CRITICAL); `73e307bc47c2` (disallow-privilege-escalation/autogen-privilege-escalation, CRITICAL); `55a0910c0cd3` (require-run-as-nonroot/run-as-non-root, HIGH); `79abedf3ae77` (require-run-as-nonroot/autogen-run-as-non-root, HIGH); `e9fffb850fa8` (disallow-capabilities-strict/require-drop-all, HIGH); `448a793445e1` (disallow-capabilities-strict/autogen-require-drop-all, HIGH)
 
-### Action 4: Enable Workload Identity and replace basic Owner IAM role with least-privilege role
+### Action 3: Enable Workload Identity on GKE cluster and replace Owner IAM binding with least-privilege role
 
-**Estimated complexity:** MEDIUM &nbsp;|&nbsp; **Dependencies:** ACT-003
+**Estimated complexity:** MEDIUM &nbsp;|&nbsp; **Dependencies:** ACT-002
 
-Workload Identity disabled means all pods inherit the node's Compute Engine SA. That SA holds basic Owner role at project level. Fixing this severs the privilege escalation-to-project-compromise chain even if a container escape occurs.
+Workload Identity disabled means all pods inherit the node's Compute Engine service account, which holds Owner-level IAM. This is the mechanism by which a container escape becomes a full GCP project compromise. Enabling Workload Identity and scoping the service account are Terraform changes.
 
-**Expected risk reduction:** Reduces blast radius of any container compromise from full project access to scoped workload permissions; addresses CORR-001.
+**Expected risk reduction:** Eliminates the path from container escape to GCP project Owner access. Reduces blast radius from project-wide to workload-scoped.
 
 **Evidence:** `f1f751c2ee51` (CKV_GCP_69, HIGH); `54c214b711d1` (CKV_GCP_49, CRITICAL); `0487801b1fb6` (CKV_GCP_117, CRITICAL)
 
-### Action 5: Replace allow_all firewall rule with scoped rules; remove public SSH/RDP/MySQL/FTP ingress
+### Action 4: Restrict GCP firewall rules — remove allow_all, scope to specific CIDRs and required ports only
+
+**Estimated complexity:** LOW &nbsp;|&nbsp; **Dependencies:** ACT-001
+
+Unrestricted ingress on SSH, RDP, MySQL, FTP, and HTTP port 80 from 0.0.0.0/0 is confirmed by Checkov at critical severity. The MySQL exposure directly amplifies the hardcoded credential risk. These are Terraform changes with no application impact.
+
+**Expected risk reduction:** Eliminates direct internet access to database and management ports. Removes the network path that makes credential exposure immediately exploitable.
+
+**Evidence:** `3ba928b4fd97` (CKV_GCP_88, CRITICAL); `dbbdc1cf61c2` (CKV_GCP_2, CRITICAL); `57df84a4027d` (CKV_GCP_3, CRITICAL); `382c6fe86e55` (CKV_GCP_77, HIGH); `e5f32d7b4723` (CKV_GCP_75, HIGH); `be6a83a66fe7` (CKV_GCP_106, MEDIUM)
+
+### Action 5: Pin deployed image references to SHA256 digests and validate cosign verification passes
 
 **Estimated complexity:** LOW &nbsp;|&nbsp; **Dependencies:** none
 
-Unrestricted internet ingress on management and database ports is a critical infrastructure exposure. This is a Terraform change that can be applied immediately without application changes.
+Kyverno confirms the cosign image verification policy fails at runtime because deployed images lack pinned digests. The supply chain signing at build time is ineffective without digest pinning at deploy time. Update CI to write the image digest into manifests/Helm values at build time.
 
-**Expected risk reduction:** Eliminates RISK-006; removes internet-accessible attack surface on node management and database ports.
+**Expected risk reduction:** Restores supply chain integrity control. Prevents substitution of unsigned images in the live cluster.
 
-**Evidence:** `dbbdc1cf61c2` (CKV_GCP_2, CRITICAL); `3ba928b4fd97` (CKV_GCP_88, CRITICAL); `57df84a4027d` (CKV_GCP_3, CRITICAL); `382c6fe86e55` (CKV_GCP_77, HIGH); `e5f32d7b4723` (CKV_GCP_75, HIGH)
+**Evidence:** `f84f2db980d4` (verify-image-cosign/verify-cosign-keyless-signature, CRITICAL); `3f6606939177` (verify-image-cosign/autogen-verify-cosign-keyless-signature, CRITICAL); `6a3ccaf023bb` (latest-tag, MEDIUM)
 
-### Action 6: Upgrade frontend axios to ≥1.18.0, dompurify to ≥3.4.12, lodash to ≥4.18.1, moment to ≥2.29.4
+### Action 6: Remediate backend injection vulnerabilities (OS command, path traversal, SQL) and disable Flask debug mode
 
-**Estimated complexity:** LOW &nbsp;|&nbsp; **Dependencies:** none
+**Estimated complexity:** HIGH &nbsp;|&nbsp; **Dependencies:** none
 
-Four npm packages account for the majority of frontend CVEs. Each is a single version bump that resolves multiple CVEs simultaneously. axios alone resolves 28 CVEs including two critical ones.
+SonarCloud (critical BLOCKER) and CodeQL independently confirm OS command injection, path traversal, and SQL injection in the backend. Flask debug mode is confirmed enabled, which turns any unhandled exception into a code execution primitive. These require code changes.
 
-**Expected risk reduction:** Resolves RISK-007 and substantially reduces frontend application_security and container_security finding counts; addresses the bulk of frontend vulnerable-dependency findings.
+**Expected risk reduction:** Eliminates confirmed remote code execution and data exfiltration vectors in the backend application layer.
 
-**Evidence:** `0dc16d7ed2e9` (SNYK-JS-AXIOS-16298058, CRITICAL); `a7b165255456` (SNYK-JS-AXIOS-16299904, CRITICAL); `82d7f2881d4c` (SNYK-JS-DOMPURIFY-8318045, CRITICAL); `6ad0842ac459` (SNYK-JS-LODASH-1040724, HIGH); `69e3a556368e` (SNYK-JS-LODASH-15869625, HIGH); `a6a58d1a71c4` (SNYK-JS-MOMENT-2440688, HIGH); `61c29417af07` (SNYK-JS-MOMENT-2944238, HIGH)
+**Evidence:** `688d20fa838a` (pythonsecurity:S2076, CRITICAL); `447335a06a0f` (pythonsecurity:S2083, CRITICAL); `6f568715650c` (py/command-line-injection, MEDIUM); `757685f73438` (py/sql-injection, MEDIUM); `9de17c0300aa` (py/path-injection, MEDIUM); `217911839f44` (py/flask-debug, MEDIUM)
 
-### Action 7: Rebuild backend container from updated base image to patch OS-layer CVEs (openssl, gnutls28, krb5, expat, pam)
-
-**Estimated complexity:** LOW &nbsp;|&nbsp; **Dependencies:** none
-
-Critical and high OS-layer CVEs in core cryptographic and authentication libraries cannot be fixed at the application level. A base image rebuild with current Debian 12 packages resolves the majority of container_security findings in a single operation.
-
-**Expected risk reduction:** Eliminates RISK-004; resolves the majority of container_security critical and high findings for the backend.
-
-**Evidence:** `80c766bd7abd` (SNYK-DEBIAN12-OPENSSL-15969314, CRITICAL); `9aeed721127a` (SNYK-DEBIAN12-GNUTLS28-16344303, CRITICAL); `903cec21ca4e` (SNYK-DEBIAN12-GNUTLS28-16344325, CRITICAL); `971307a2fb61` (SNYK-DEBIAN12-KRB5-7411315, CRITICAL); `406f0f4dac9b` (SNYK-DEBIAN12-EXPAT-7855502, CRITICAL); `afabe834cfa4` (SNYK-DEBIAN12-EXPAT-7855503, CRITICAL); `ad17eeee434e` (SNYK-DEBIAN12-PAM-10378969, HIGH)
-
-### Action 8: Resolve image signing and Artifact Registry verification failures
-
-**Estimated complexity:** MEDIUM &nbsp;|&nbsp; **Dependencies:** none
-
-Supply chain verification is UNKNOWN for both images and Kyverno's cosign policy is actively failing. Until this is resolved, there is no assurance that what is running in the cluster matches what was scanned.
-
-**Expected risk reduction:** Eliminates RISK-005; restores supply chain integrity assurance and makes CORR-002 moot.
-
-**Evidence:** `f84f2db980d4` (verify-image-cosign/verify-cosign-keyless-signature, CRITICAL); `3f6606939177` (verify-image-cosign/autogen-verify-cosign-keyless-signature, CRITICAL)
-
-### Action 9: Remediate XSS in backend and frontend; upgrade dompurify
-
-**Estimated complexity:** MEDIUM &nbsp;|&nbsp; **Dependencies:** ACT-006
-
-Critical XSS confirmed by multiple tools in both components. The sanitization library (dompurify) itself is vulnerable, undermining the defense-in-depth layer. Must be fixed before serving untrusted user content.
-
-**Expected risk reduction:** Eliminates RISK-008; removes client-side code execution vectors.
-
-**Evidence:** `b554580125be` (pythonsecurity:S5131, CRITICAL); `6751a218019c` (jssecurity:S5696, CRITICAL); `4825cf439910` (py/reflective-xss, MEDIUM); `82d7f2881d4c` (SNYK-JS-DOMPURIFY-8318045, CRITICAL); `36df65e5cd25` (py/bad-tag-filter, MEDIUM)
-
-### Action 10: Upgrade backend Python dependencies: pillow to ≥12.3.0, cryptography to ≥48.0.1, flask-cors to ≥6.0.0
+### Action 7: Upgrade frontend axios to >=1.16.0 and dompurify to >=3.4.12; also upgrade lodash and moment
 
 **Estimated complexity:** LOW &nbsp;|&nbsp; **Dependencies:** none
 
-Three pip packages account for the majority of backend application-layer CVEs. pillow 11.3.0 carries 16 findings (high/medium); cryptography 43.0.3 carries 4; flask-cors 4.0.2 carries 4. Each is a single version bump.
+axios@0.21.1 carries 2 critical and 8+ high CVEs; dompurify@2.3.3 carries 1 critical and multiple high/medium CVEs including XSS bypasses in the XSS sanitizer itself. Both have documented fixed versions. A single upgrade per package resolves all known CVEs. Also upgrade lodash to >=4.18.1 and moment to >=2.29.4.
 
-**Expected risk reduction:** Resolves the majority of backend application_security vulnerable-dependency findings.
+**Expected risk reduction:** Resolves 50+ frontend dependency CVEs including 3 critical findings. Restores the integrity of the XSS sanitization layer.
 
-**Evidence:** `524835b29043` (SNYK-PYTHON-PILLOW-15265439, HIGH); `8891af27bcb3` (SNYK-PYTHON-PILLOW-16032068, HIGH); `0b2ca1c5c052` (SNYK-PYTHON-PILLOW-16419303, HIGH); `574389232a75` (SNYK-PYTHON-CRYPTOGRAPHY-15263096, HIGH); `ca8ca4aa1e13` (SNYK-PYTHON-CRYPTOGRAPHY-17344551, HIGH); `b3a42d493492` (SNYK-PYTHON-FLASKCORS-7707876, HIGH); `d6fc6f9489fe` (SNYK-PYTHON-FLASKCORS-9668954, HIGH)
+**Evidence:** `0dc16d7ed2e9` (SNYK-JS-AXIOS-16298058, CRITICAL); `a7b165255456` (SNYK-JS-AXIOS-16299904, CRITICAL); `82d7f2881d4c` (SNYK-JS-DOMPURIFY-8318045, CRITICAL); `9eda1fcf005c` (SNYK-JS-DOMPURIFY-7984421, HIGH); `6ad0842ac459` (SNYK-JS-LODASH-1040724, HIGH); `69e3a556368e` (SNYK-JS-LODASH-15869625, HIGH); `a6a58d1a71c4` (SNYK-JS-MOMENT-2440688, HIGH); `61c29417af07` (SNYK-JS-MOMENT-2944238, HIGH)
 
-### Action 11: Add explicit permissions blocks to all GitHub Actions workflows
+### Action 8: Rebuild backend container image from updated Debian 12 base with patched system packages
+
+**Estimated complexity:** MEDIUM &nbsp;|&nbsp; **Dependencies:** ACT-005
+
+Critical CVEs in openssl, gnutls28, krb5, expat, and zlib are present in the backend container image. These are OS-layer packages requiring a base image rebuild. Patched versions are documented in remediation_notes for each finding.
+
+**Expected risk reduction:** Eliminates critical OS-layer CVEs in TLS and authentication libraries from the live backend container.
+
+**Evidence:** `80c766bd7abd` (SNYK-DEBIAN12-OPENSSL-15969314, CRITICAL); `9aeed721127a` (SNYK-DEBIAN12-GNUTLS28-16344303, CRITICAL); `903cec21ca4e` (SNYK-DEBIAN12-GNUTLS28-16344325, CRITICAL); `971307a2fb61` (SNYK-DEBIAN12-KRB5-7411315, CRITICAL); `083d9d82d66b` (SNYK-DEBIAN12-ZLIB-6008963, CRITICAL); `406f0f4dac9b` (SNYK-DEBIAN12-EXPAT-7855502, CRITICAL); `afabe834cfa4` (SNYK-DEBIAN12-EXPAT-7855503, CRITICAL)
+
+### Action 9: Upgrade backend Python dependencies: pillow to >=12.3.0, cryptography to >=48.0.1, flask-cors to >=6.0.0
 
 **Estimated complexity:** LOW &nbsp;|&nbsp; **Dependencies:** none
 
-12 CI workflow jobs (6 backend, 6 frontend) lack explicit GITHUB_TOKEN permission scoping, granting broader-than-necessary token access to every job. This is a low-effort hardening step.
+pillow@11.3.0 carries 16 findings (high/medium) including out-of-bounds writes and memory allocation issues. cryptography@43.0.3 carries 4 findings. flask-cors@4.0.2 carries 4 findings including improper access control. Each has a single upgrade target that resolves all known CVEs for that package.
 
-**Expected risk reduction:** Reduces CI/CD supply chain attack surface; resolves all ci-misconfiguration findings.
+**Expected risk reduction:** Resolves 24+ backend application-layer dependency CVEs across three packages in three upgrade operations.
 
-**Evidence:** `494149924f9b` (actions/missing-workflow-permissions, MEDIUM); `67272be356ee` (actions/missing-workflow-permissions, MEDIUM)
+**Evidence:** `524835b29043` (SNYK-PYTHON-PILLOW-15265439, HIGH); `8891af27bcb3` (SNYK-PYTHON-PILLOW-16032068, HIGH); `0b2ca1c5c052` (SNYK-PYTHON-PILLOW-16419303, HIGH); `a41f49c22ac4` (SNYK-PYTHON-PILLOW-17824465, HIGH); `574389232a75` (SNYK-PYTHON-CRYPTOGRAPHY-15263096, HIGH); `ca8ca4aa1e13` (SNYK-PYTHON-CRYPTOGRAPHY-17344551, HIGH); `b3a42d493492` (SNYK-PYTHON-FLASKCORS-7707876, HIGH); `d6fc6f9489fe` (SNYK-PYTHON-FLASKCORS-9668954, HIGH)
 
-### Action 12: Disable Flask debug mode and remove stack trace exposure in production
+### Action 10: Enforce public access prevention and access logging on GCS bucket; enable Workload Identity and network hardening
 
-**Estimated complexity:** LOW &nbsp;|&nbsp; **Dependencies:** none
+**Estimated complexity:** MEDIUM &nbsp;|&nbsp; **Dependencies:** ACT-003
 
-Flask debug mode enables the Werkzeug interactive debugger, which allows arbitrary code execution by anyone who can reach the debug endpoint. Stack trace exposure leaks internal implementation details to attackers.
+The public storage bucket, missing access logging, disabled master authorized networks, missing NetworkPolicy, and missing VPC flow logs are all confirmed Terraform gaps. These are lower urgency than the above but represent a meaningful reduction in the infrastructure attack surface and audit capability.
 
-**Expected risk reduction:** Eliminates remote code execution via debug endpoint; reduces information disclosure.
+**Expected risk reduction:** Closes the public data exposure risk on the storage bucket. Adds network segmentation and audit visibility to the cluster.
 
-**Evidence:** `217911839f44` (py/flask-debug, MEDIUM); `c504da4d8155` (py/stack-trace-exposure, MEDIUM); `0c9c83aacaa9` (docker:S4507, LOW)
+**Evidence:** `189191849e41` (CKV_GCP_114, CRITICAL); `724685b547f7` (CKV_GCP_29, HIGH); `354070e54e2f` (CKV_GCP_62, MEDIUM); `7a97a533c5a2` (CKV_GCP_12, MEDIUM); `0d8acda49a79` (CKV_GCP_20, MEDIUM); `8d32bd1d8e72` (CKV_GCP_61, MEDIUM); `6cb8ab1f3f5f` (CKV_GCP_66, MEDIUM)
 
 ---
 
@@ -310,37 +314,34 @@ Flask debug mode enables the Werkzeug interactive debugger, which allows arbitra
 
 **Confidence:** HIGH
 
-This release has multiple independent blocking conditions across application, infrastructure, runtime, and supply chain domains, all at high confidence. Critical injection vulnerabilities (OS command injection, SQL injection) are confirmed by two independent tools in the deployed backend. Hardcoded database credentials are committed to source. The live cluster is actively failing Kyverno privilege escalation policy enforcement across 26+ workload locations. Infrastructure Terraform exposes unrestricted SSH/RDP/MySQL firewall rules and grants basic Owner IAM at project level. Container image supply chain verification is UNKNOWN for both images, and the Kyverno cosign policy is non-functional. No single one of these conditions alone would be acceptable for production; together they represent a release that is not safe to deploy or leave running in its current state.
+This release has multiple independent, high-confidence blocking conditions across every measured domain. In the live cluster: privilege escalation is not blocked, containers run as root, no seccomp profiles are set, and cosign image verification fails at runtime — all confirmed by Kyverno policy enforcement. In the application layer: OS command injection, path traversal, SQL injection, and XSS are confirmed at critical severity by two independent tools (SonarCloud BLOCKER + CodeQL). Hardcoded PostgreSQL credentials are confirmed by three independent tools. In infrastructure: Owner-level IAM is granted at project scope, Workload Identity is disabled, and unrestricted firewall rules expose SSH, RDP, and MySQL to the internet. The combination of these findings creates a confirmed path from a single container-level exploit to full GCP project compromise. No single finding in isolation would necessarily block deployment, but the convergence of critical application vulnerabilities, absent runtime security controls, excessive IAM, and open network perimeter makes this release unsafe for production deployment in its current state.
 
-**Blocking evidence:** `688d20fa838a` (pythonsecurity:S2076, CRITICAL); `049991827bea` (secrets:S6698, CRITICAL); `f913039e3a2a` (disallow-privilege-escalation/privilege-escalation, CRITICAL); `73e307bc47c2` (disallow-privilege-escalation/autogen-privilege-escalation, CRITICAL); `dbbdc1cf61c2` (CKV_GCP_2, CRITICAL); `54c214b711d1` (CKV_GCP_49, CRITICAL); `0487801b1fb6` (CKV_GCP_117, CRITICAL); `f84f2db980d4` (verify-image-cosign/verify-cosign-keyless-signature, CRITICAL); `3f6606939177` (verify-image-cosign/autogen-verify-cosign-keyless-signature, CRITICAL); `217911839f44` (py/flask-debug, MEDIUM)
+**Blocking evidence:** `f913039e3a2a` (disallow-privilege-escalation/privilege-escalation, CRITICAL); `73e307bc47c2` (disallow-privilege-escalation/autogen-privilege-escalation, CRITICAL); `688d20fa838a` (pythonsecurity:S2076, CRITICAL); `447335a06a0f` (pythonsecurity:S2083, CRITICAL); `049991827bea` (secrets:S6698, CRITICAL); `f84f2db980d4` (verify-image-cosign/verify-cosign-keyless-signature, CRITICAL); `3f6606939177` (verify-image-cosign/autogen-verify-cosign-keyless-signature, CRITICAL); `54c214b711d1` (CKV_GCP_49, CRITICAL); `0487801b1fb6` (CKV_GCP_117, CRITICAL); `f1f751c2ee51` (CKV_GCP_69, HIGH); `3ba928b4fd97` (CKV_GCP_88, CRITICAL); `dbbdc1cf61c2` (CKV_GCP_2, CRITICAL); `57df84a4027d` (CKV_GCP_3, CRITICAL)
 
 **Conditions:**
-- Rotate and externalize all hardcoded credentials (PostgreSQL password, SECRET_KEY) and confirm they are no longer present in source or image layers.
-- Remediate OS command injection and SQL injection in the backend before serving any production traffic.
-- Set allowPrivilegeEscalation: false and runAsNonRoot: true on all container securityContexts so Kyverno policy enforcement passes.
-- Replace the allow_all firewall rule with scoped rules that do not expose SSH, RDP, MySQL, or FTP to 0.0.0.0/0.
-- Resolve the Artifact Registry image manifest lookup failure and confirm cosign signing ran successfully for the exact deployed digest.
-- Disable Flask debug mode in the production deployment configuration.
-- Enable Workload Identity on the GKE cluster and replace the basic Owner IAM role with a least-privilege role.
-- Upgrade axios, dompurify, lodash, and moment in the frontend to versions that resolve all critical CVEs.
-- Rebuild the backend container from an updated base image to patch critical OS-layer CVEs in openssl, gnutls28, krb5, and expat.
+- allowPrivilegeEscalation=false and runAsNonRoot=true enforced on all deployed workloads (Kyverno policy must pass)
+- All hardcoded credentials rotated and removed from source; secrets loaded from a secret manager at runtime
+- Backend OS command injection, path traversal, and SQL injection vulnerabilities remediated in code
+- Flask debug mode disabled via environment configuration
+- Deployed image references pinned to SHA256 digests and cosign verification policy passing in the live cluster
+- Workload Identity enabled on the GKE node pool and Owner IAM binding replaced with a least-privilege role
+- Unrestricted firewall rules (SSH, RDP, MySQL, FTP) restricted to specific source CIDRs
+- Frontend axios upgraded to >=1.16.0 and dompurify upgraded to >=3.4.12 (resolves critical CVEs in the XSS sanitizer)
 
 ---
 
 ## Assumptions & Unknowns
 
-- **`provenance.application_security.any_used_fallback_commit`** = `true` — All four application security workflows ran against a different commit (8827a89e) than this release (c4f0b852). Findings may not reflect code changes introduced between those commits and this release. Application security findings could be understated or overstated relative to the actual release state.
-- **`provenance.infrastructure_security.version_matches_application_security`** = `false` — Infrastructure security scans ran against a different source version than application security scans. While this is expected behavior per the provenance note, it means infra findings may not reflect any Terraform/Helm changes made in commits between the infra scan and this release.
-- **`provenance.infrastructure_security.commits_behind`** = _[pointer did not resolve against final_release_context.json]_ — The number of commits between the infrastructure scan version and the release version could not be computed. The degree of drift between scanned and released infrastructure configuration is unknown; the infra findings may be stale.
-- **`signal_availability.reachability`** = `"not_collected"` — Reachability is not collected for any finding. Injection, XSS, SSRF, and path traversal findings cannot be confirmed as reachable from an external attacker's perspective. Prioritization is based on severity and cross-tool confirmation only; some findings may be in dead code paths.
-- **`signal_availability.exploitability`** = `"not_collected"` — Exploitability is not collected. No CVSS temporal or environmental scores, no exploit-in-the-wild data, and no proof-of-concept availability information is available. Risk prioritization relies on base severity only, which may over- or under-weight specific CVEs.
-- **`signal_availability.business_impact`** = `"not_collected"` — Business impact is not collected. The report cannot distinguish between findings affecting a revenue-critical path versus a low-traffic internal endpoint. All components are treated as equally business-critical.
-- **`signal_availability.internet_exposure`** = `"not_collected"` — Internet exposure is not collected. It is assumed the deployed-app is internet-facing based on the ZAP scan and the open firewall rules, but this is an inference. If certain components are internal-only, their risk priority may be lower than assessed.
-- **`signal_availability.delta_status`** = `"not_collected"` — Delta status (new vs. pre-existing findings) is not collected. It is unknown which findings are regressions introduced by this release versus pre-existing technical debt. This prevents the report from distinguishing release-introduced risk from baseline risk.
-- **`supply_chain.backend.verification_status`** = `"UNKNOWN"` — Backend image verification status is UNKNOWN due to a manifest lookup failure. All container_security findings for the backend were assessed against an image whose identity cannot be confirmed. If the running image differs from the scanned image, the actual container-layer attack surface is unknown.
-- **`supply_chain.frontend.verification_status`** = `"UNKNOWN"` — Frontend image verification status is UNKNOWN for the same reason as backend. Additionally, the Kyverno cosign policy is actively failing with an Artifact Registry permission denial, meaning the runtime image verification control is non-functional and cannot be relied upon as a compensating control.
-- **`sbom_summary.backend.packages_with_known_vulnerabilities`** = `["apt@2.6.1", "coreutils@9.1-1", "diffutils@1:3.8-4", "dpkg@1.21.22", "gzip@1.12-1", "libcap2@1:2.66-4", "libgcrypt20@1.10.1-3", "libtasn1-6@4.19.0-2", "openssl@3.0.9-1", "sed@4.9-1", "tar@1.34+dfsg-1.2"]` — The SBOM lists packages with known vulnerabilities (e.g. apt, coreutils, openssl, libgcrypt20) that do not all appear as individual findings in the findings array. The full scope of OS-layer vulnerability exposure in the backend image may be broader than what the container_security findings alone represent.
-- **`sbom_summary.frontend.packages_with_known_vulnerabilities`** = `["apt@3.0.3", "coreutils@9.7-3", "curl@8.14.1-2+deb13u4", "diffutils@1:3.10-4", "gzip@1.13-1", "libgcrypt20@1.11.0-7+deb13u1", "libxml2@2.12.7+dfsg+really2.9.14-2.1+deb13u3", "nginx@1.31.3-1~trixie", "tar@1.35+dfsg-3.1", "util-linux@2.41-5"]` — Similarly, the frontend SBOM lists packages (curl, libxml2, util-linux, nginx) with known vulnerabilities. The nginx finding does appear in findings, but others may represent additional unscored exposure not fully captured in the findings array.
+- **`signal_availability.reachability`** = `"not_collected"` — Reachability is not collected. All vulnerability prioritization is based on severity and confidence alone. Some high/medium findings may not be reachable in practice, which could lower their effective priority. Conversely, critical findings (especially injection and XSS) are assumed reachable given the application accepts user input — but this is an inference, not a measured fact. The absence of reachability data means the report cannot distinguish between a vulnerability in a dead code path and one in a hot path.
+- **`signal_availability.exploitability`** = `"not_collected"` — Exploitability is not collected. The report cannot distinguish between a vulnerability that requires authentication, specific preconditions, or local access versus one that is trivially exploitable from the internet. This gap most significantly affects the OS-layer container CVEs, where exploitability varies widely by CVE. The critical/high severity ratings are used as the best available proxy.
+- **`signal_availability.internet_exposure`** = `"not_collected"` — Internet exposure is not collected. The report cannot confirm which services are actually internet-facing. The open firewall rules (0.0.0.0/0) suggest broad exposure, but the actual routing and load balancer configuration is not measured. This gap means the network-level risk assessment is based on infrastructure configuration findings rather than confirmed traffic paths.
+- **`signal_availability.delta_status`** = `"not_collected"` — Delta status is not collected. The report cannot distinguish between findings that are new in this release versus findings that have been present and accepted in prior releases. This means all findings are treated as equally urgent, which may overstate the incremental risk introduced by this specific release while understating the accumulated technical debt.
+- **`provenance.application_security`** = `{"per_workflow": {"backend-ci.yaml": {"source_version": "2382597af3ea184f9897d9373f10bc0b59ff083d", "exact_match": true}, "frontend-ci.yaml": {"source_version": "2382597af3ea184f9897d9373f10bc0b59ff083d", "exact_match": true}, "app-security-scan-backend.yaml": {"source_version": "2382597af3ea184f9897d9373f10bc0b59ff083d", "exact_match": true}, "app-security-scan-frontend.yaml": {"source_version": "2382597af3ea184f9897d9373f10bc0b59ff083d", "exact_match": true}}, "any_used_fallback_commit": false, "note": "Per-workflow real source commit, since backend-ci.yaml/frontend-ci.yaml/app-security-scan-*.yaml only re-run on backend/**/frontend/** changes \u2014 exact_match: false means that workflow's latest successful run came from a different commit than this release, surfaced here rather than silently assumed current. Still file-level only within each workflow \u2014 no per-tool (codeql vs sonarcloud vs gitguardian vs snyk) timestamps exist yet."}` — Per-tool timestamps within each workflow are not tracked — only file-level workflow timestamps exist. It is not possible to determine whether codeql, sonarcloud, gitguardian, or snyk results within a given workflow run are from the same scan invocation or from cached/prior results. This limits confidence that all application security findings reflect the exact state of this release commit.
+- **`supply_chain.backend.verification_status`** = `"SUCCESS"` — The supply_chain block reports SUCCESS for both backend and frontend image verification. However, Kyverno's live policy check (finding f84f2db980d4 and 3f6606939177) reports missing digests for the deployed image references. This discrepancy means the build-time verification status does not reflect the runtime enforcement state. The supply chain control should be treated as non-functional until the Kyverno policy passes in the live cluster.
+- **`sbom_summary.backend.packages_with_known_vulnerabilities`** = `["apt@2.6.1", "coreutils@9.1-1", "diffutils@1:3.8-4", "dpkg@1.21.22", "gzip@1.12-1", "libcap2@1:2.66-4", "libgcrypt20@1.10.1-3", "libtasn1-6@4.19.0-2", "openssl@3.0.9-1", "sed@4.9-1", "tar@1.34+dfsg-1.2"]` — The SBOM lists packages with known vulnerabilities (apt, coreutils, dpkg, gzip, tar, sed, etc.) that do not appear as individual findings in the findings array. It is not clear whether these were scanned and found clean, scanned and suppressed, or not scanned at the finding level. If these packages carry unscanned vulnerabilities, the container security risk is understated.
+- **`scan_status.backend.snyk`** = `"SUCCESS"` — Snyk reports both application-layer (pip) and OS-layer (deb) findings for the backend. Several OS-layer findings (zlib, expat high severity) lack remediation_notes with fixed-in versions, suggesting no fix may be available in the current Debian 12 package stream. If fixes are not available, a time-boxed exception policy and compensating controls (network isolation, WAF) would be needed rather than a simple package upgrade.
+- **`provenance.infrastructure_security.commits_behind`** = _[pointer did not resolve against final_release_context.json]_ — commits_behind is null because versions match between application_security and infrastructure_security. This is the expected case per the provenance note. No staleness concern applies to infrastructure findings for this release.
+- **`signal_availability.business_impact`** = `"not_collected"` — Business impact is not collected. The report cannot weight findings by the business criticality of the affected component or data. All components (backend, frontend, deployed-app, infrastructure, terraform) are treated as equally business-critical. If some components are non-production or handle non-sensitive data, the effective risk of their findings may be lower than assessed here.
 
 ---
 
@@ -348,4 +349,4 @@ This release has multiple independent blocking conditions across application, in
 
 ### ❌ DO NOT APPROVE
 
-This release has multiple independent blocking conditions across application, infrastructure, runtime, and supply chain domains, all at high confidence. Critical injection vulnerabilities (OS command injection, SQL injection) are confirmed by two independent tools in the deployed backend. Hardcoded database credentials are committed to source. The live cluster is actively failing Kyverno privilege escalation policy enforcement across 26+ workload locations. Infrastructure Terraform exposes unrestricted SSH/RDP/MySQL firewall rules and grants basic Owner IAM at project level. Container image supply chain verification is UNKNOWN for both images, and the Kyverno cosign policy is non-functional. No single one of these conditions alone would be acceptable for production; together they represent a release that is not safe to deploy or leave running in its current state.
+This release has multiple independent, high-confidence blocking conditions across every measured domain. In the live cluster: privilege escalation is not blocked, containers run as root, no seccomp profiles are set, and cosign image verification fails at runtime — all confirmed by Kyverno policy enforcement. In the application layer: OS command injection, path traversal, SQL injection, and XSS are confirmed at critical severity by two independent tools (SonarCloud BLOCKER + CodeQL). Hardcoded PostgreSQL credentials are confirmed by three independent tools. In infrastructure: Owner-level IAM is granted at project scope, Workload Identity is disabled, and unrestricted firewall rules expose SSH, RDP, and MySQL to the internet. The combination of these findings creates a confirmed path from a single container-level exploit to full GCP project compromise. No single finding in isolation would necessarily block deployment, but the convergence of critical application vulnerabilities, absent runtime security controls, excessive IAM, and open network perimeter makes this release unsafe for production deployment in its current state.

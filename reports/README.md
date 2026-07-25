@@ -6,13 +6,13 @@ have no way to see what the AI Release Intelligence Engine actually outputs.
 
 | | |
 |---|---|
-| **Report ID** | `798bc99d23f4ea72` |
+| **Report ID** | `d6af1576eadedf6c` |
 | **Generated** | 2026-07-25 |
-| **Release** | `c4f0b85` |
+| **Release** | `2382597` |
 | **Model** | `claude-sonnet-4-6` |
 | **Verdict** | `DO_NOT_APPROVE` — health CRITICAL, deployment confidence LOW |
 | **Findings** | 240 across 4 domains, 9 tools |
-| **Correlations** | 5 cross-domain |
+| **Correlations** | 7 cross-domain |
 | **Scan coverage** | **17 of 17 scanners `SUCCESS`** |
 
 Domain split: `application_security` 127, `container_security` 57,
@@ -33,7 +33,7 @@ or a container scan whose status was hardcoded.
 ## ⚠️ Placeholder
 
 **These files are not byte-identical to the pipeline's output.** The real GCP
-project ID was replaced with `<GCP_PROJECT_ID>` (16 occurrences, HTML only —
+project ID was replaced with `<GCP_PROJECT_ID>` (8 occurrences, HTML only —
 Artifact Registry image paths). That substitution is the **only**
 modification. Findings, severities, correlations, verdict, reasoning and
 finding-id citations are exactly as generated.
@@ -50,24 +50,29 @@ keys deliberately planted in this codebase — appears in the output.
 
 ## What it demonstrates
 
-**Cross-tool correlation.** The lead correlation joins Checkov's *static*
-Terraform finding (Workload Identity disabled, project-level Owner IAM on the
-node service account) to Kyverno's *live* runtime confirmation that
-`allowPrivilegeEscalation` is unset across 26+ workload locations — concluding
-that a container process which escalates can reach the GCE metadata server and
-turn a container breakout into full project compromise. Five citations, two
-domains, two tools, one static and one runtime. No single scanner produces
-that sentence.
+**Cross-tool correlation.** The lead correlation — *"Workload Identity
+disabled + Owner IAM + root containers = full project blast radius"* — spans
+all three of `runtime_security`, `infrastructure_security` and
+`application_security`, citing **9 findings** from Checkov's static Terraform
+analysis and Kyverno's live admission results together. It concludes that a
+container process which escalates reaches the GCE metadata server and turns a
+breakout into full project compromise. One static tool, one runtime tool, nine
+citations. No single scanner produces that sentence.
 
 **Runtime evidence is real, not static analysis.** Kyverno's violations are
 live admission results from the deployed cluster, scanned 0 days stale, and
 the report distinguishes them from configuration review explicitly.
 
-**Honest gaps.** `assumptions_and_unknowns` carries 12 entries, including that
-reachability, exploitability, business impact and internet exposure are **not
-collected**, that supply-chain verification returned UNKNOWN for both images,
-and — unprompted — that the upstream scans ran at the preceding commit rather
-than this one, which the model read off the provenance block.
+**Honest gaps.** `assumptions_and_unknowns` carries 10 entries: reachability,
+exploitability, business impact and internet exposure are **not collected**,
+and supply-chain verification returned UNKNOWN for both images.
+
+**Provenance is exact.** Every upstream scan ran at `2382597`, the same commit
+this report assesses — `any_used_fallback_commit` is `false`, the
+infrastructure scan's version matches, and all three runtime scanners report
+`days_stale: 0`. Earlier reports carried fallback matching or a 28-day-stale
+infrastructure scan, and said so; this one has nothing of the kind to
+disclose, which is why the assumptions list is two entries shorter.
 
 ## Caveats, stated rather than hidden
 
