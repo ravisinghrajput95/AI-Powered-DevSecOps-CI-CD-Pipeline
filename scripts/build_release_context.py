@@ -248,7 +248,13 @@ def filter_container_findings_by_severity(findings, floor):
     cutoff = SEVERITY_RANK.get(floor, 0)
     kept, dropped = [], 0
     for f in findings:
-        if f.get("domain") != "container_security":
+        # assign_domain() is called rather than reading f["domain"]: at this
+        # stage the field does not exist yet. Domain assignment happens later,
+        # in compose_release_context.py (see assign_domain's own docstring).
+        # Reading f.get("domain") here silently matched nothing and the filter
+        # was a no-op — confirmed by a real run that let 329 low and 38 medium
+        # container findings through a "high" floor.
+        if assign_domain(f) != "container_security":
             kept.append(f)
             continue
         if SEVERITY_RANK.get(f.get("severity", ""), 0) >= cutoff:
