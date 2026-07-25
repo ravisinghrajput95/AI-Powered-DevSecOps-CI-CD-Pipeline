@@ -6,12 +6,38 @@ on:
     paths:
       - "scripts/**"
       - "tests/**"
-      - ".github/workflows/tests.yaml"
+      # ALL workflows, not just this one. tests/test_workflow_invariants.py
+      # asserts structural properties of the security workflows — that scan
+      # status derives from a captured exit code rather than a job result
+      # continue-on-error has masked, that no scanner-side severity threshold
+      # is reintroduced, that "Record scan status" runs after the SBOM step,
+      # that deploy jobs are gated on push-from-main, that the DAST target is
+      # resolved at runtime, and that every action is SHA-pinned.
+      #
+      # With the path filter limited to tests.yaml, editing backend-ci.yaml or
+      # deploy-backend.yaml did NOT run those tests — the guards were
+      # bypassable by precisely the change they exist to catch. Every defect
+      # they encode was a real, shipped regression that produced a green check
+      # over incomplete data.
+      - ".github/workflows/**"
   pull_request:
     paths:
       - "scripts/**"
       - "tests/**"
-      - ".github/workflows/tests.yaml"
+      # ALL workflows, not just this one. tests/test_workflow_invariants.py
+      # asserts structural properties of the security workflows — that scan
+      # status derives from a captured exit code rather than a job result
+      # continue-on-error has masked, that no scanner-side severity threshold
+      # is reintroduced, that "Record scan status" runs after the SBOM step,
+      # that deploy jobs are gated on push-from-main, that the DAST target is
+      # resolved at runtime, and that every action is SHA-pinned.
+      #
+      # With the path filter limited to tests.yaml, editing backend-ci.yaml or
+      # deploy-backend.yaml did NOT run those tests — the guards were
+      # bypassable by precisely the change they exist to catch. Every defect
+      # they encode was a real, shipped regression that produced a green check
+      # over incomplete data.
+      - ".github/workflows/**"
 
 jobs:
   test:

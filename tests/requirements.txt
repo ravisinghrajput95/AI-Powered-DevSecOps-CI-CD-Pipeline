@@ -1,2 +1,13 @@
 pytest>=8.0
 jsonschema>=4.20
+
+# Required by tests/test_workflow_invariants.py, which parses the security
+# workflows and asserts structural properties of them.
+#
+# Declared explicitly because that module guards with
+# pytest.importorskip("yaml"): without PyYAML installed those 17 tests SKIP
+# rather than fail, and a skipped guard is indistinguishable from a passing
+# one in CI summary output. That is the same silent-success pattern the
+# tests themselves exist to prevent, so the dependency must be declared
+# rather than assumed present.
+PyYAML>=6.0
