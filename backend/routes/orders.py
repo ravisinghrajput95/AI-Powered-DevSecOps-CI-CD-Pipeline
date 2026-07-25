@@ -6,13 +6,16 @@ from models.cart import CartItem
 from models.order import Order, OrderItem
 from models.product import Product
 from models.user import db
+from routes.identity import resolve_user_id
 
 orders_bp = Blueprint("orders", __name__)
 
 
 @orders_bp.route("/", methods=["GET"])
 def list_orders():
-    user_id = session.get("user_id") or request.args.get("user_id")
+    user_id, _identity_error = resolve_user_id()
+    if _identity_error:
+        return _identity_error
     # VULN: IDOR - can list any user's orders via user_id param
     if request.args.get("all") == "true":
         orders = Order.query.all()
@@ -38,7 +41,9 @@ def get_order(order_id):
 @orders_bp.route("/checkout", methods=["POST"])
 def checkout():
     data = request.get_json() or {}
-    user_id = session.get("user_id") or data.get("user_id")
+    user_id, _identity_error = resolve_user_id(data)
+    if _identity_error:
+        return _identity_error
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 

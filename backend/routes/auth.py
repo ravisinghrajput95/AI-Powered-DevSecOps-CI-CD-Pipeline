@@ -9,6 +9,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from config import DEBUG, JWT_SECRET, SECRET_KEY
 from models.user import User, db
+from routes.identity import resolve_user_id
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -101,7 +102,9 @@ def logout():
 
 @auth_bp.route("/me", methods=["GET"])
 def get_current_user():
-    user_id = session.get("user_id") or request.args.get("user_id")
+    user_id, _identity_error = resolve_user_id()
+    if _identity_error:
+        return _identity_error
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
 

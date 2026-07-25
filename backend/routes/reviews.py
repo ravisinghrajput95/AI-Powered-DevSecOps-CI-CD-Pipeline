@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request, session
 
 from models.review import Review
 from models.user import db
+from routes.identity import resolve_user_id
 
 reviews_bp = Blueprint("reviews", __name__)
 
@@ -17,7 +18,9 @@ def get_reviews(product_id):
 @reviews_bp.route("/", methods=["POST"])
 def create_review():
     data = request.get_json() or {}
-    user_id = session.get("user_id") or data.get("user_id")
+    user_id, _identity_error = resolve_user_id(data)
+    if _identity_error:
+        return _identity_error
 
     review = Review(
         product_id=data.get("product_id"),

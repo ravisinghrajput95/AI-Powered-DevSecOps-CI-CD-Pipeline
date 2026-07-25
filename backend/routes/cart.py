@@ -5,45 +5,9 @@ from flask import Blueprint, jsonify, request, session
 from models.cart import CartItem
 from models.product import Product
 from models.user import db
+from routes.identity import resolve_user_id
 
 cart_bp = Blueprint("cart", __name__)
-
-
-def get_user_id():
-    """Resolve the caller's user id from session, query param, or header.
-
-    NOTE the trust model here is intentionally broken — accepting an
-    unauthenticated ?user_id= or X-User-Id header is one of the planted
-    IDOR vulnerabilities and must stay. What is fixed below is the crash:
-    the value is caller-controlled, so it must be coerced defensively
-    before use.
-    """
-    return (
-        session.get("user_id")
-        or request.args.get("user_id")
-        or request.headers.get("X-User-Id")
-    )
-
-
-def resolve_user_id():
-    """Return (user_id:int|None, error_response|None).
-
-    Every cart route previously called int(get_user_id()) directly, which
-    raised on two ordinary inputs and returned HTTP 500:
-      - missing identity        -> TypeError: int() argument must be ... not 'NoneType'
-      - non-numeric ?user_id=x  -> ValueError: invalid literal for int()
-
-    Both are client errors and should be 401/400. This does NOT tighten the
-    trust model — a caller can still impersonate any user id, exactly as the
-    IDOR demo requires; it only stops malformed input crashing the process.
-    """
-    raw = get_user_id()
-    if raw is None or raw == "":
-        return None, (jsonify({"error": "Not authenticated"}), 401)
-    try:
-        return int(raw), None
-    except (TypeError, ValueError):
-        return None, (jsonify({"error": "Invalid user id"}), 400)
 
 
 @cart_bp.route("/", methods=["GET"])

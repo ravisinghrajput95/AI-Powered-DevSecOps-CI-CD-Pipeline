@@ -16,12 +16,10 @@ export function AuthProvider({ children }) {
         if (!active) return
         const userData = res.data
         setUser(userData)
-        localStorage.setItem('user', JSON.stringify(userData))
         localStorage.setItem('user_id', userData.id)
       } catch {
         if (!active) return
         setUser(null)
-        localStorage.removeItem('user')
         localStorage.removeItem('token')
         localStorage.removeItem('user_id')
       } finally {
@@ -40,7 +38,6 @@ export function AuthProvider({ children }) {
     const res = await auth.login({ username, password })
     const { user: userData, token } = res.data
     setUser(userData)
-    localStorage.setItem('user', JSON.stringify(userData))
     localStorage.setItem('token', token)
     localStorage.setItem('user_id', userData.id)
     return userData
@@ -50,15 +47,18 @@ export function AuthProvider({ children }) {
     const res = await auth.register(data)
     const userData = res.data.user
     setUser(userData)
-    localStorage.setItem('user', JSON.stringify(userData))
     localStorage.setItem('user_id', userData.id)
+    // NOTE: the register response carries no token (unlike login), so a
+    // freshly registered user holds a session cookie but no Bearer token
+    // and behaves differently from a logged-in one. Fixing that properly
+    // means issuing a token from /api/auth/register — a backend contract
+    // change — rather than papering over it here.
     return userData
   }
 
   const logout = async () => {
     await auth.logout().catch(() => {})
     setUser(null)
-    localStorage.removeItem('user')
     localStorage.removeItem('token')
     localStorage.removeItem('user_id')
   }

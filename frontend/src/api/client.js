@@ -1,18 +1,25 @@
 import axios from 'axios'
 
 // VULN: API key stored in localStorage, hardcoded fallback
-const API_KEY = localStorage.getItem('api_key') || 'sk_live_cloudcart_default_key'
+// (the storage location and the fallback are intentional; only WHEN it is
+// read has changed)
+const DEFAULT_API_KEY = 'sk_live_cloudcart_default_key'
 const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 const client = axios.create({
   baseURL: API_URL,
   withCredentials: true,
-  headers: {
-    'X-API-Key': API_KEY,
-  },
 })
 
+// Read per request, not once at module load. API_KEY used to be captured
+// when this module was first imported, so a key written to localStorage
+// afterwards — by login, or by a user setting one manually — was never
+// picked up until a full page reload. token and user_id were already read
+// per request here; the API key simply wasn't, which made the three
+// inconsistent for no reason.
 client.interceptors.request.use((config) => {
+  config.headers['X-API-Key'] = localStorage.getItem('api_key') || DEFAULT_API_KEY
+
   const token = localStorage.getItem('token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
