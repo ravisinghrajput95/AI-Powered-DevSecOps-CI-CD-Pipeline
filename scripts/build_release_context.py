@@ -227,6 +227,43 @@ def assign_domain(finding):
     return "application_security"
 
 
+def filter_container_findings_by_severity(findings, floor):
+    """Drop container-scan findings below `floor`.
+
+    Deliberately narrow: only container_security is filtered, and only after
+    domain assignment. Application, infrastructure and runtime findings pass
+    through untouched — their low-severity entries are individually
+    meaningful (a low-severity SQLi hint is worth reading), whereas a base
+    image's 161st low-severity OS package CVE is not.
+
+    This is the significance decision the three-layer split assigns to
+    Python: scanners report every fact into the artifact, the context
+    builder chooses what the model reasons over. Filtering at the scanner
+    instead — which is what --severity-threshold did until 2026-07-25 —
+    destroys the data irrecoverably and, worse, silently: the frontend image
+    reported "No known operating system vulnerabilities" while carrying 182.
+    """
+    if floor is None:
+        return findings
+    cutoff = SEVERITY_RANK.get(floor, 0)
+    kept, dropped = [], 0
+    for f in findings:
+        if f.get("domain") != "container_security":
+            kept.append(f)
+            continue
+        if SEVERITY_RANK.get(f.get("severity", ""), 0) >= cutoff:
+            kept.append(f)
+        else:
+            dropped += 1
+    if dropped:
+        print(
+            f"  container_security: {dropped} finding(s) below '{floor}' excluded from the "
+            f"ReleaseContext (still present in the raw scan artifacts).",
+            file=sys.stderr,
+        )
+    return kept
+
+
 def tag_findings(findings, component):
     """Add component + a not-yet-available delta_status to each finding,
     rather than silently omitting the field (which would let the prompt
@@ -597,6 +634,20 @@ def main():
     parser.add_argument("--kubearmor-metadata")
     parser.add_argument("--supply-chain")
     parser.add_argument("--risk-acceptance")
+    parser.add_argument(
+        "--container-severity-floor",
+        default="high",
+        choices=["critical", "high", "medium", "low", "informational"],
+        help="Lowest container-scan severity to include in the ReleaseContext. "
+             "Container scans now run WITHOUT --severity-threshold so the raw "
+             "artifact is a complete audit record; this decides what reaches "
+             "the AI. Default 'high' because OS base images produce very long "
+             "low-severity tails (nginx:latest alone: 161 low, 6 medium, 15 "
+             "high) that add ~70%% to context size and cost without changing a "
+             "release decision. Lower it deliberately when that tail matters. "
+             "Applies to container_security findings only — application, "
+             "infrastructure and runtime findings are never filtered.",
+    )
     parser.add_argument("--scan-status")
     args = parser.parse_args()
 
@@ -635,6 +686,14 @@ def main():
     kubearmor_findings = load_json(args.kubearmor_findings, [])
     all_findings.extend(tag_findings(kubearmor_findings, "deployed-app"))
     kubearmor_scan_metadata = compute_scan_metadata(load_json(args.kubearmor_metadata, None), kubearmor_findings)
+
+    # Applied BEFORE grouping so occurrence_count/locations reflect only what
+    # actually reaches the context — otherwise a finding could report 40
+    # occurrences of which 38 were filtered out, which is worse than either
+    # filtering or not filtering.
+    all_findings = filter_container_findings_by_severity(
+        all_findings, args.container_severity_floor
+    )
 
     remediation_guide = {}
     grouped_findings = group_findings(all_findings, remediation_guide)

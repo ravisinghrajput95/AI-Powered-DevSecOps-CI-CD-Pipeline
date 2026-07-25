@@ -204,10 +204,17 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           set +e
+          # No --severity-threshold: the scanner's job is to report facts,
+          # and the artifact is the audit record. Filtering here destroyed
+          # data irrecoverably — on 2026-07-25 --severity-threshold=critical
+          # reported the frontend image as having "No known operating system
+          # vulnerabilities" while Snyk's own output in the same report
+          # listed 182 (0 critical, 15 high, 6 medium, 161 low). Which
+          # findings reach the AI is decided downstream, where it can be
+          # changed without re-running scans.
           snyk container test \
             $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_BACKEND/$BACKEND_IMAGE_NAME:${{ github.sha }} \
             --file=backend/Dockerfile \
-            --severity-threshold=high \
             --json-file-output=snyk-backend.json
           exit_code=$?
           set -e
