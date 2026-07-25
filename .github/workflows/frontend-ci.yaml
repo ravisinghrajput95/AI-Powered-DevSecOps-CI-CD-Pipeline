@@ -168,7 +168,7 @@ jobs:
           snyk container test \
             $GAR_REGION-docker.pkg.dev/$GCP_PROJECT_ID/$GAR_REPOSITORY_FRONTEND/$FRONTEND_IMAGE_NAME:${{ github.sha }} \
             --file=frontend/Dockerfile \
-            --severity-threshold=critical \
+            --severity-threshold=high \
             --json-file-output=snyk-frontend.json
           exit_code=$?
           set -e
