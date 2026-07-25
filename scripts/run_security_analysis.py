@@ -38,14 +38,23 @@ are the model's job:
    EXISTENCE (a real finding's actual id) — this check catches what the
    schema can't.
 
-UNVALIDATED AGAINST A REAL TOOL-USE API CALL specifically — the prior
-free-text version of this script WAS validated against a real run (see
-git history / prior release_report.md). This tool-use rewrite changes the
-request shape (tools + tool_choice) but not the auth/network path, which
-was already confirmed working. Same expectation as every other "first
-real run" this pipeline has had: share the first real executive_report.json
-(and raw API response, if anything looks off) so this can be fixed against
-real output the same way every other piece was.
+VALIDATED against real tool-use API calls on 2026-07-25 — report
+fc3ff0dc9c44a2bc (claude-haiku-4-5, 239 findings, 4 domains) plus earlier
+claude-sonnet-4-6 runs the same day. The corrective retry is validated too,
+and not synthetically: Haiku failed schema validation on its first attempt
+(a risk-theme string exceeded max length) and succeeded on the retry, which
+is the path exercised least often and most likely to rot.
+
+Two things that path does NOT establish, worth stating so nobody reads more
+into a green run than it earned:
+
+  - Reasoning QUALITY is unmeasured. Citations are checked for existence and
+    correlations for structural consistency with their evidence
+    (tests/test_cross_domain_integrity.py), but whether an insight is a good
+    one is a human judgement, and no test here claims otherwise.
+  - Run-to-run stability is unmeasured. temperature is pinned to 0 in
+    call_claude specifically to reduce this variance, but reducing is not
+    eliminating, and nothing has quantified what remains.
 
 Usage:
     run_security_analysis.py --release-context final_release_context.json \\
@@ -149,7 +158,8 @@ def build_initial_messages(release_context_json):
     return [{"role": "user", "content": user_message}]
 
 
-def call_claude(messages, tool_schema, system_prompt, model, max_tokens, api_key, timeout):
+def call_claude(messages, tool_schema, system_prompt, model, max_tokens, api_key, timeout,
+                temperature=0.0):
     """One API call. Takes a full messages list, not just the initial
     user message — this is what makes the corrective retry in main()
     possible: a retry is just this same function called again with two
@@ -158,6 +168,19 @@ def call_claude(messages, tool_schema, system_prompt, model, max_tokens, api_key
     payload = {
         "model": model,
         "max_tokens": max_tokens,
+        # Pinned low because this output gates a deployment. The API default
+        # is 1.0, and at that setting two runs over an IDENTICAL release
+        # context can differ in how many correlations they find and, in
+        # principle, in the verdict itself — which would make the report
+        # unreproducible for the one decision it exists to support. It also
+        # made model comparison unreadable: one run on Sonnet found 7
+        # correlations to Haiku's 6, and at temperature 1.0 there was no way
+        # to separate model capability from sampling noise.
+        #
+        # This reduces variance; it does not eliminate it. Inference is not
+        # bit-deterministic even at 0, so do not read identical input +
+        # identical temperature as a guarantee of identical output.
+        "temperature": temperature,
         "system": system_prompt,
         "messages": messages,
         "tools": [
@@ -320,6 +343,13 @@ def main():
              "(see call_claude), it'll be obvious from the logs if this still isn't enough.",
     )
     parser.add_argument(
+        "--temperature", type=float, default=0.0,
+        help="Default 0.0, not the API's default of 1.0. A release verdict should be a "
+             "function of the evidence, not of sampling — the same release context should "
+             "not approve on one run and block on the next. Raise it only to deliberately "
+             "explore how much the reasoning moves; that is an experiment, not a release run.",
+    )
+    parser.add_argument(
         "--timeout", type=int, default=600,
         help="Raised from an earlier default of 180s after a real run hit a read timeout — "
              "a near-max-tokens tool-use generation over 54 findings can genuinely take "
@@ -380,7 +410,8 @@ def main():
     for attempt in range(1, MAX_ATTEMPTS + 1):
         print(f"Calling the model (attempt {attempt}/{MAX_ATTEMPTS})...")
         ai_output, tool_use_id, raw_response = call_claude(
-            messages, tool_schema, system_prompt, args.model, args.max_tokens, api_key, args.timeout
+            messages, tool_schema, system_prompt, args.model, args.max_tokens, api_key,
+            args.timeout, args.temperature
         )
         candidate_report = assemble_executive_report(ai_output, release_context)
 
