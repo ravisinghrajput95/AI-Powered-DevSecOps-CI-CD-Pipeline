@@ -1,7 +1,7 @@
 # CLAUDE.md — AI-Powered DevSecOps CI/CD Pipeline
 
 ## Project Overview
-This project builds an AI-powered DevSecOps CI/CD pipeline using GitHub Actions, Google Cloud (GKE), and Claude as the AI agent framework. The pipeline runs against **CloudCart** — an intentionally vulnerable 3-tier ecommerce application — to demonstrate real-world AI-assisted security findings, cross-tool exploitability analysis, and automated remediation.
+This project builds an AI-powered DevSecOps CI/CD pipeline using GitHub Actions, Kubernetes, and Claude as the AI agent framework. The pipeline runs against **CloudCart** — an intentionally vulnerable 3-tier ecommerce application — to demonstrate real-world AI-assisted security findings, cross-tool exploitability analysis, and automated remediation.
 
 ## Target Application — CloudCart
 - **Type**: Intentionally vulnerable 3-tier ecommerce app (monorepo)
@@ -19,7 +19,7 @@ This project builds an AI-powered DevSecOps CI/CD pipeline using GitHub Actions,
                        #   bootstrap/  cluster prerequisites — install FIRST
                        #   postgresql/ database + schema/seed ConfigMaps
                        #   cloudcart/  the application (backend + frontend subcharts)
-  /terraform           # GKE infrastructure (intentionally misconfigured for Checkov)
+  /terraform           # Kubernetes cluster infrastructure (intentionally misconfigured for Checkov)
   /policies            # kyverno/ (19 ClusterPolicies), kubearmor/ (8 policies)
   /scripts             # normalizers, context builders, AI engine, renderers
   /tests               # 507-test suite for scripts/ (golden + real-world fixtures)
@@ -95,7 +95,7 @@ Two-phase design. Build DevOps layer first, then layer in DevSecOps security gat
 | 16a | Image Signature Verification | Cosign Verify | AI Sign Agent | **Always blocks** |
 | 17 | Kyverno (Admission) | Kyverno admission controller | AI Kyverno Analyzer | Critical/High block |
 | 18 | KubeArmor (Runtime) | KubeArmor | AI Runtime Incident Analyzer | Critical/High block |
-| 19 | Deploy to GKE | Google GKE, Kubernetes | AI K8s Security Agent | Critical/High block |
+| 19 | Deploy to Kubernetes | Kubernetes | AI K8s Security Agent | Critical/High block |
 | 20 | DAST | OWASP ZAP | AI OWASP Expert Agent | Critical/High block |
 | 21 | Monitoring (Continuous) | Prometheus, Grafana, Google Cloud Monitoring, Falco | AI Observability Agent | Alerts only |
 
@@ -123,7 +123,7 @@ ArgoCD Detects Drift → Sync
 Image Signature Verification (Cosign Verify) ← Stage 16a
       |
       v
-Google GKE (Workloads Running)
+Kubernetes (Workloads Running)
 ```
 
 ### PR Review Flow
@@ -281,7 +281,7 @@ This is the differentiator — no individual tool sees the full picture.
 | AI Remediation Agent | Post-15 | Auto-creates fix PRs from critical/high findings |
 | AI Kyverno Analyzer | Stage 17 | Policy violation explanation, CIS/PSS mapping, fix suggestions |
 | AI Runtime Incident Analyzer | Stage 18 + 21 | KubeArmor + Falco → executive summary, MITRE mapping, root cause |
-| AI K8s Security Agent | Stage 19 | Cluster posture, continuous monitoring, GKE compliance |
+| AI K8s Security Agent | Stage 19 | Cluster posture, continuous monitoring, Kubernetes compliance |
 | AI OWASP Expert Agent | Stage 20 | Exploit analysis, remediation guidance (OWASP ZAP) |
 | AI Observability Agent | Stage 21 | Security alerts, anomaly detection, threat intelligence |
 
@@ -301,9 +301,9 @@ This is the differentiator — no individual tool sees the full picture.
 
 ---
 
-## Runtime Security in Google GKE
+## Runtime Security in Kubernetes
 ```
-Artifact Registry → GKE → Kyverno (Admission Controller) → KubeArmor (Runtime Security)
+Container Registry → Kubernetes → Kyverno (Admission Controller) → KubeArmor (Runtime Security)
 → Application Workloads → Prometheus / Grafana / Cloud Monitoring / Falco (Observability)
 ```
 
@@ -331,7 +331,7 @@ Artifact Registry → GKE → Kyverno (Admission Controller) → KubeArmor (Runt
 | Registry | Google Artifact Registry (immutable tags) |
 | Helm | helm, kubeconform |
 | GitOps | ArgoCD *(planned — not yet implemented)* |
-| K8s | Google GKE |
+| K8s | Kubernetes |
 | Admission control | Kyverno |
 | Runtime security | KubeArmor |
 | DAST | OWASP ZAP |
@@ -343,7 +343,9 @@ Artifact Registry → GKE → Kyverno (Admission Controller) → KubeArmor (Runt
 ---
 
 ## Cloud
-- **Primary**: Google Cloud — GKE, Artifact Registry, Cloud Monitoring
+- **Orchestration**: Kubernetes (currently provisioned on Google Cloud —
+  GKE, Artifact Registry, Cloud Monitoring; the manifests, Helm charts and
+  policies are vendor-neutral)
 - **Region/zone**: us-central1 / us-central1-a
 - **Auth**: Workload Identity Federation (no long-lived service-account keys)
 - **GitOps**: ArgoCD — **not yet implemented**; deploys currently run
