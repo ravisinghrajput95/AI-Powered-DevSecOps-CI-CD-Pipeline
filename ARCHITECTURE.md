@@ -142,7 +142,7 @@ AI-authored fields: `executive_summary`, `cross_domain_correlations[]`, `top_ris
 
 ## Test suite
 
-558 automated tests in `tests/`:
+559 automated tests in `tests/`:
 
 - Schema validation for both contracts, against golden fixtures and real frozen CI artifacts.
 - Evidence-citation integrity — every cited `finding_id` must exist in real findings. This is the single highest-value check: it's the exact test that would have caught a real citation bug from an early run (a transposed character in a `finding_id`, cited twice with two slightly different values).

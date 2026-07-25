@@ -21,7 +21,7 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-DOCS_CLAIMING_TEST_COUNT = ["README.md", "ARCHITECTURE.md"]
+DOCS_CLAIMING_TEST_COUNT = ["README.md", "ARCHITECTURE.md", "CLAUDE.md"]
 
 
 def collected_test_count():
