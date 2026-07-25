@@ -43,6 +43,10 @@ def claimed_counts(filename):
         int(n)
         for n in re.findall(r"(\d{3,4})[\s-]+(?:automated )?tests?\b", text)
         + re.findall(r"(\d{3,4})-test suite", text)
+        # README carries a shields.io badge, e.g. `tests-559%20passing`. It is
+        # the most visible count in the repository and the least likely to be
+        # remembered, since it lives in a URL rather than prose.
+        + re.findall(r"tests?-(\d{3,4})%20passing", text)
     ]
 
 

@@ -1,8 +1,39 @@
-# CloudCart - Cloud-Native E-Commerce
+# AI-Powered DevSecOps CI/CD Pipeline
+
+[![Test Suite](https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/actions/workflows/tests.yaml/badge.svg)](https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/actions/workflows/tests.yaml)
+[![CodeQL](https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/actions/workflows/codeql.yaml/badge.svg)](https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/actions/workflows/codeql.yaml)
+[![Tests](https://img.shields.io/badge/tests-559%20passing-brightgreen)](tests/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+Nine security scanners produce nine incompatible reports, and nobody can tell
+you whether the release is safe to ship. This pipeline consolidates them into
+**one evidence-cited release recommendation** — every claim traced back to a
+real finding by id, every absent signal declared rather than rendered as clean.
+
+[![AI release readiness report — verdict "Do not approve", health CRITICAL, with a cross-domain correlation citing individual finding ids](docs/images/release-report.png)](reports/sample/release_report.md)
+
+*A real report from this pipeline — 240 findings, 4 domains, 9 tools, all 19 scanners reporting `SUCCESS`, `claude-sonnet-4-6`. [Read the full version](reports/sample/release_report.md) ([styled HTML](reports/sample/release_report.html)). The chips under each correlation are `finding_id` references pointing at actual scanner findings in `final_release_context.json`. A malformed id fails schema validation and the renderer refuses to write the report; a well-formed id that matches no finding renders but raises a warning at both the analysis and render steps. Note the correlation itself: Checkov's static Terraform findings joined to Kyverno's live admission results, spanning application, infrastructure and runtime domains with nine citations, concluding that a container breakout becomes full GCP project compromise. One static tool, one runtime tool, one sentence neither could produce alone.*
+
+**Three properties make this more than a dashboard:**
+
+- **Cross-domain correlation.** Static Terraform analysis joined to live cluster admission results, application code joined to container CVEs — statements no individual scanner can produce, and the reason this exists.
+- **Evidence by reference.** The AI never restates a finding, only cites it. A malformed `finding_id` fails schema validation and the renderer refuses to write the file.
+- **Absent signals are declared.** `NO_SIGNAL` distinguishes "the tool ran and found nothing" from "there is nothing to find", so an unmeasured domain can never be read as a clean one.
+
+| | |
+|---|---|
+| **See the output** | [`reports/sample/release_report.md`](reports/sample/release_report.md) — a real 240-finding report |
+| **Run it offline** | `python3 scripts/demo_report.py` — no cluster, no API key, no network |
+| **How it works** | [ARCHITECTURE.md](ARCHITECTURE.md) — design, schemas, domain model |
+| **Reporting a bug** | [SECURITY.md](SECURITY.md) — read first; most vulnerabilities here are deliberate |
+
+---
+
+## Target application — CloudCart
 
 > **WARNING:** This application is **intentionally insecure**. It exists solely for AI-augmented DevSecOps platform POC, security tool evaluation, and pipeline demonstration. **Never deploy to production or expose to the public internet.**
 
-CloudCart is a fully functional cloud-native e-commerce application with realistic vulnerabilities and misconfigurations designed to generate rich findings across the DevSecOps toolchain.
+CloudCart is a fully functional cloud-native e-commerce application with realistic vulnerabilities and misconfigurations designed to generate rich findings across the DevSecOps toolchain. It is the pipeline's test fixture: the findings in the report above are all real, and all planted here on purpose.
 
 ## Architecture
 
@@ -331,11 +362,15 @@ Scans are designed to produce findings even when secrets are not set; several wo
 
 Every scanner above produces its own raw, tool-specific output. This platform turns that into one structured, evidence-grounded release decision — not a dashboard aggregating numbers, an actual reasoned recommendation with citations back to real findings.
 
-[![AI release readiness report — verdict "Do not approve", health CRITICAL, with a cross-domain correlation citing individual finding ids](docs/images/release-report.png)](reports/sample/release_report.md)
+### Evidence by reference, made tangible
 
-*A real report from this pipeline — 240 findings, 4 domains, 9 tools, all 17 scanners reporting `SUCCESS`, `claude-sonnet-4-6`. [Read the full version](reports/sample/release_report.md) ([styled HTML](reports/sample/release_report.html)). The chips under each correlation are `finding_id` references pointing at actual scanner findings in `final_release_context.json`. A malformed id fails schema validation and the renderer refuses to write the report; a well-formed id that matches no finding renders but raises a warning at both the analysis and render steps. Note the correlation itself: Checkov's static Terraform findings joined to Kyverno's live admission results, spanning application, infrastructure and runtime domains with nine citations, concluding that a container breakout becomes full GCP project compromise. One static tool, one runtime tool, one sentence neither could produce alone. No single scanner produces that sentence.*
+The defining constraint is that the AI never restates a finding — it cites one. In the rendered report each citation is a native `<details>` disclosure that expands a bare `finding_id` into the finding it resolves to: severity, component, category and the scanner's own message. No JavaScript, keyboard-accessible by default.
 
-Reproduce the rendering half of that locally — no cluster, no API key, no network:
+![One cross-domain correlation with four of its nine evidence chips expanded, each resolving a finding_id to its severity, component, category and scanner message](docs/images/evidence-chips.png)
+
+*The same card as above, with four citations expanded and five still collapsed. Note the mix: `f1f751c2ee51` and `54c214b711d1` are Checkov findings against Terraform, `f913039e3a2a` is a Kyverno admission failure on the live cluster. One correlation, two tools, static and runtime evidence side by side — and every claim in the prose above traceable to a specific finding rather than paraphrased.*
+
+Reproduce the rendering and citation-resolution half locally, from committed fixtures — no cluster, no API key, no network:
 
 ```bash
 python3 scripts/demo_report.py --list          # 9 scenarios, verdicts from APPROVE to DO_NOT_APPROVE
