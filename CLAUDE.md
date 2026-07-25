@@ -374,14 +374,34 @@ Container Registry → Kubernetes → Kyverno (Admission Controller) → KubeArm
 ---
 
 ## Coding Conventions
-- Python: PEP8, type hints on all functions, docstrings on public methods
-- Flask: use blueprints for route organization, Flask-SQLAlchemy for all DB interactions
+- Python: PEP8. **No type hints** — this codebase does not use them (0 of 114
+  functions in `scripts/`, 0 of 53 in `backend/`). Do not add them piecemeal;
+  a half-annotated tree is worse than an unannotated one because it implies a
+  guarantee that only sometimes holds. Adopting them is a deliberate,
+  all-at-once decision, not something to slip into an unrelated change.
+- Python docstrings: the real convention here, and the one to hold to. Every
+  module gets a docstring explaining **why it exists and what failure it
+  prevents**, not what it does — `scripts/normalizer_common.py`,
+  `backend/routes/identity.py` and `tests/test_workflow_invariants.py` are the
+  reference examples. Functions get one when the rationale isn't obvious from
+  the name. Prefer one paragraph of real context over a `:param:` block
+  restating the signature.
+- Comments earn their place by explaining a decision, a constraint, or a bug
+  that motivated the code. A comment restating the line below it is noise.
+- Flask: use blueprints for route organization, Flask-SQLAlchemy for DB
+  interactions — **except** where a planted vulnerability requires otherwise.
+  `backend/routes/products.py` builds raw SQL via `db.session.execute(text(...))`
+  on purpose; that is the SQL injection the pipeline reports every run, and
+  `backend/tests/` asserts it is still there. Do not "fix" it.
 - React: functional components only, no class components
 - All secrets via environment variables via python-dotenv — never hardcoded
 - GitHub Actions: pin all action versions with SHA hashes (supply chain security)
 - Docker: multi-stage builds, non-root user, distroless or alpine base images
 - Helm: always validate with kubeconform before deploy
-- ArgoCD: all deployments via GitOps — no direct kubectl apply in pipeline
+- Deployments: `helm upgrade --install` from `deploy-backend.yaml` /
+  `deploy-frontend.yaml`. ArgoCD is **not implemented** — no workflow
+  references it. The GitOps flow described earlier in this file is target
+  design, not current behaviour; write against Helm until that changes.
 - Cosign: always verify image signature before ArgoCD deployment (Stage 16a)
 
 ---

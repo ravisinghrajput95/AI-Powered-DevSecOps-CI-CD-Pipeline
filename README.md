@@ -333,7 +333,14 @@ Every scanner above produces its own raw, tool-specific output. This platform tu
 
 [![AI release readiness report — verdict "Do not approve", health CRITICAL, with a cross-domain correlation citing individual finding ids](docs/images/release-report.png)](reports/sample/release_report.md)
 
-*A real report from this pipeline — [read the full version](reports/sample/release_report.md) ([styled HTML](reports/sample/release_report.html)). The chips under each correlation are `finding_id` references that resolve to actual scanner findings in `final_release_context.json`; a citation that does not resolve fails the run. Note the correlation itself: CodeQL/SonarCloud injection findings joined to Checkov's open firewall rules and to Kyverno's live admission failures. No single scanner produces that sentence.*
+*A real report from this pipeline — [read the full version](reports/sample/release_report.md) ([styled HTML](reports/sample/release_report.html)). The chips under each correlation are `finding_id` references pointing at actual scanner findings in `final_release_context.json`. A malformed id fails schema validation and the renderer refuses to write the report; a well-formed id that matches no finding renders but raises a warning at both the analysis and render steps. Note the correlation itself: CodeQL/SonarCloud injection findings joined to Checkov's open firewall rules and to Kyverno's live admission failures. No single scanner produces that sentence.*
+
+Reproduce the rendering half of that locally — no cluster, no API key, no network:
+
+```bash
+python3 scripts/demo_report.py --list          # 9 scenarios, verdicts from APPROVE to DO_NOT_APPROVE
+python3 scripts/demo_report.py                 # renders the real captured run
+```
 
 **Full design, schema reference, domain model, and workflow orchestration diagram: [ARCHITECTURE.md](ARCHITECTURE.md)**
 
