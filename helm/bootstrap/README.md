@@ -65,8 +65,35 @@ Every event arrives as `Type: ContainerLog` with `PolicyName: null`; no
 that field is only populated on policy alerts — so it is a symptom, not
 the cause.
 
-Next step is upstream: this looks like a KubeArmor v1.5.7 / GKE-COS
-interaction rather than a configuration error in this repo.
+**It is not an alerting problem — enforcement itself is inactive.** A
+diagnostic `action: Block` policy on `/bin/ls`, selecting the same pod, did
+not block execution: the command ran normally. So policies are not being
+applied to the container at all, rather than matching-but-not-reporting.
+
+`karmor probe` reports everything healthy on every node:
+
+```
+Active LSM:          BPFLSM
+Container Security:  true
+Container Runtime:   containerd://2.1.7
+Kernel Version:      6.12.85+   (Container-Optimized OS)
+Kubelet:             v1.35.6-gke.1049000
+DaemonSet:           Desired 5, Ready 5, Available 5
+```
+
+Telemetry works — BPF hooks fire and events are correctly attributed to the
+right container — while policy enforcement does not. That split is
+consistent with KubeArmor resolving containers for *logging* but failing to
+key its per-container policy maps, which is where a containerd 2.x
+interface change would surface.
+
+Suspected environment incompatibility: **containerd 2.1.7** (a recent
+major version) with `kubearmor:stable` / operator v1.7.4 on GKE 1.35 COS.
+Unconfirmed — it needs an upstream issue, ideally with a reproduction on a
+containerd 1.x node pool to isolate the variable. Until then the pipeline
+records `NO_SIGNAL` for kubearmor (see
+`scripts/release_context_schema.py`), so the runtime domain reports as
+UNMEASURED rather than clean.
 
 ## Ordering
 
