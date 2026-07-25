@@ -237,6 +237,41 @@ jobs:
           if-no-files-found: ignore
 
       # See backend-ci.yaml's identical step for why this exists.
+      - name: Generate SBOM with Syft
+        id: syft
+        continue-on-error: true
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.GAR_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY_FRONTEND }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+          format: spdx-json
+          output-file: sbom-frontend.spdx.json
+          upload-artifact: false
+
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-frontend
+          path: sbom-frontend.spdx.json
+          if-no-files-found: ignore
+
+      - name: Normalize SBOM
+        if: always()
+        run: python3 scripts/normalize_sbom.py normalized-sbom-frontend.json sbom-frontend.spdx.json frontend
+
+      - name: Upload normalized SBOM
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: normalized-sbom-frontend
+          path: normalized-sbom-frontend.json
+          if-no-files-found: ignore
+
+      # MUST run after the SBOM steps: this records syft's outcome and
+      # verifies the SPDX file actually contains packages. It previously
+      # sat before 'Generate SBOM with Syft', so the check ran one second
+      # too early, found no file, and recorded syft as failed on every
+      # build while syft was producing a ~400KB SBOM.
       - name: Record scan status
         if: always()
         run: |
@@ -269,35 +304,7 @@ jobs:
       # upload-artifact: false because the action's own built-in uploader
       # needs `contents: write`, which this job intentionally doesn't grant —
       # uploading explicitly below instead, same pattern as the Snyk report.
-      - name: Generate SBOM with Syft
-        id: syft
-        continue-on-error: true
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
-        with:
-          image: ${{ env.GAR_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY_FRONTEND }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
-          format: spdx-json
-          output-file: sbom-frontend.spdx.json
-          upload-artifact: false
 
-      - name: Upload SBOM artifact
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: sbom-frontend
-          path: sbom-frontend.spdx.json
-          if-no-files-found: ignore
-
-      - name: Normalize SBOM
-        if: always()
-        run: python3 scripts/normalize_sbom.py normalized-sbom-frontend.json sbom-frontend.spdx.json frontend
-
-      - name: Upload normalized SBOM
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: normalized-sbom-frontend
-          path: normalized-sbom-frontend.json
-          if-no-files-found: ignore
 
       - name: Push Docker image
         run: |
