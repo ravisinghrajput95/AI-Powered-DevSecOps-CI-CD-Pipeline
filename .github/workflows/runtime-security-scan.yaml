@@ -442,12 +442,17 @@ jobs:
       # kubearmor needs a distinct status from the other two. Its job
       # genuinely succeeds — karmor connects to the relay, captures for the
       # full window, writes a valid file — while producing an empty finding
-      # set because no policy ever matches (see helm/bootstrap/README.md for
-      # the six hypotheses tested and eliminated). Reporting that as SUCCESS
-      # tells the model "runtime scanned, nothing found", i.e. clean, when
-      # the truth is UNMEASURED. NO_SIGNAL exists for exactly this shape and
-      # is the one silent-zero an exit code cannot detect, because the exit
-      # code is legitimately 0.
+      # set. Reporting that as SUCCESS tells the model "runtime scanned,
+      # nothing found", i.e. clean, when the truth is UNMEASURED. NO_SIGNAL
+      # exists for exactly this shape and is the one silent-zero an exit code
+      # cannot detect, because the exit code is legitimately 0.
+      #
+      # This previously fired on every run, and was long attributed to an
+      # upstream KubeArmor defect. It was not: the capture window was idle,
+      # because a steady-state web app never execs the shells the policies
+      # watch for. The window is now exercised (see the capture step above),
+      # so a NO_SIGNAL here means the exercise failed to generate events —
+      # which is worth investigating rather than accepting as normal.
       - name: Record scan status
         run: |
           KA_RESULT="${{ needs.kubearmor-live-scan.result }}"
