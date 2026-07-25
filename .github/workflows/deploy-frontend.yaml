@@ -20,7 +20,13 @@ env:
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # See deploy-backend.yaml's deploy job for the full reasoning: without
+    # the event/head_branch guards, a green PR build deploys unmerged code,
+    # and a Dependabot PR deploys an image tag that was never built.
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.event == 'push'
+          && github.event.workflow_run.head_branch == 'main' }}
     name: Deploy Frontend via Helm
     runs-on: ubuntu-latest
     steps:

@@ -21,7 +21,21 @@ env:
 jobs:
   deploy:
     name: Deploy Backend via Helm
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Three conditions, all required:
+    #   conclusion  — never deploy off a failed CI run.
+    #   event       — `workflow_run` fires for PR-triggered CI too, so without
+    #                 this a green PR build deploys UNMERGED code to the
+    #                 cluster. Only a push to the branch below should deploy.
+    #   head_branch — restricts that to main specifically.
+    # The event/head_branch guards matter most for Dependabot PRs: their
+    # docker job is skipped (see backend-ci.yaml), which makes the run
+    # succeed, and a skipped build means the image tagged with this run's
+    # head_sha was never pushed — so a deploy here would reference an image
+    # that does not exist in Artifact Registry.
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.event == 'push'
+          && github.event.workflow_run.head_branch == 'main' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

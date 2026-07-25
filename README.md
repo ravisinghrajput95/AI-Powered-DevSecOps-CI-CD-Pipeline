@@ -146,6 +146,29 @@ Cloudcart/
 - Node.js 18+
 - Docker (recommended for PostgreSQL)
 
+### 0. Repo setup (one time)
+
+Run from the repository root, before the steps below:
+
+```bash
+# Installs husky git hooks, lint-staged, and eslint.
+# Without this, the pre-commit hooks in .husky/ never activate.
+npm install
+
+# Formatters/linters the pre-commit hook runs on staged Python files.
+pip install -r backend/requirements-dev.txt
+```
+
+Confirm the hooks are wired up — this should print `.husky/_`:
+
+```bash
+git config core.hooksPath
+```
+
+Optionally install [ggshield](https://docs.gitguardian.com/ggshield-docs/getting-started)
+for the pre-commit secret scan. It is skipped with a warning if absent, and
+never blocks a commit.
+
 ### 1. Start PostgreSQL
 
 ```bash
