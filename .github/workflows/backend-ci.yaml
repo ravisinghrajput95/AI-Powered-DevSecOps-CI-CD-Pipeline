@@ -50,7 +50,10 @@ jobs:
         # Same manifest the pre-commit hook's formatters come from, so CI and
         # local hooks can't drift onto different black/isort versions and
         # disagree about formatting.
-        run: pip install -r backend/requirements-dev.txt
+        # Path is relative to this job's `working-directory: backend`, hence
+        # no `backend/` prefix — unlike cache-dependency-path above, which is
+        # an action input and so resolves from the repo root instead.
+        run: pip install -r requirements-dev.txt
 
       - name: Check formatting with black
         run: python -m black --check .
