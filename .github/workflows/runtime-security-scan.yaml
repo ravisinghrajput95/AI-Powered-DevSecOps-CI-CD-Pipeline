@@ -21,7 +21,7 @@ on:
       target_url:
         description: "URL to scan (DAST only)"
         required: false
-        default: "http://35.224.10.204/"
+        default: "http://34.57.233.78/"
         type: string
       reset_database:
         description: "Reset the database after the DAST scan (truncate + reseed). Off by default — Baseline Scan is passive/read-only, so this is mainly worth enabling if you suspect a GET route has a stateful side effect, or once Full Scan is ever adopted here."
