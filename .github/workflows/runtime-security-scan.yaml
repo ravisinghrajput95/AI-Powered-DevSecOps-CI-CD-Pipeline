@@ -260,15 +260,20 @@ jobs:
   # karmor logs is a live gRPC stream (see normalize_kubearmor.py's
   # docstring) — so this captures whatever happens during a bounded
   # window of this CI run, not a snapshot of historical violations.
-  # CAPTURE_SECONDS chosen to keep the job fast; a quiet capture window
-  # legitimately produces zero findings, which doesn't mean "nothing to
-  # worry about" the way a clean kube-linter/checkov result does.
+  # A quiet capture window legitimately produces zero findings, which doesn't
+  # mean "nothing to worry about" the way a clean kube-linter/checkov result
+  # does — hence NO_SIGNAL rather than SUCCESS-with-zero.
+  #
+  # CAPTURE_SECONDS covers three things in sequence: ~10s for the karmor gRPC
+  # stream to establish, the policy exercise, and enough tail afterwards for
+  # alerts to propagate daemonset -> relay -> client. It was 30s, which left
+  # roughly 20s for the last two and no margin.
   # ───────────────────────────────────────────────────────────────────────
   kubearmor-live-scan:
     name: KubeArmor Live Log Capture
     runs-on: ubuntu-latest
     env:
-      CAPTURE_SECONDS: 30
+      CAPTURE_SECONDS: 75
     steps:
       - name: Checkout code (for scripts/)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -303,11 +308,29 @@ jobs:
       # `timeout`'s exit code 124 (process killed after the time limit) is
       # the EXPECTED outcome here, not a failure — this is a deliberately
       # bounded capture, not karmor logs exiting on its own.
+      # The window records what happens while it is open, and a steady-state
+      # web app does nothing these policies watch for — so every previous run
+      # closed an empty window and the runtime domain reported NO_SIGNAL. That
+      # was long mistaken for KubeArmor being broken on GKE/COS; it is not. A
+      # manual capture with a shell exec against the same cluster produces the
+      # expected alert immediately (ksp-backend-block-shell-exec, severity 8,
+      # MITRE-T1059). The window was idle, not deaf.
+      #
+      # So generate the behaviour during the window — the same active-probing
+      # model ZAP uses. Findings from this are simulated adversary actions
+      # proving detection works, not evidence of a real intrusion.
       - name: Capture KubeArmor live logs
         id: kubearmor_run
         run: |
           set +e
-          timeout "${CAPTURE_SECONDS}s" karmor logs --json --logFilter=policy --logPath=kubearmor-logs.json
+          timeout "${CAPTURE_SECONDS}s" karmor logs --json --logFilter=policy --logPath=kubearmor-logs.json &
+          karmor_pid=$!
+          # The gRPC stream must be established before events are generated,
+          # or they happen before anything is listening and are lost.
+          sleep 10
+          bash .github/scripts/exercise-kubearmor-policies.sh \
+            || echo "::warning::policy exercise reported a problem — the capture may be empty"
+          wait "$karmor_pid"
           exit_code=$?
           set -e
           if [ $exit_code -eq 0 ] || [ $exit_code -eq 124 ]; then

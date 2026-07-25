@@ -172,9 +172,15 @@ the exact failure it exists to catch.
 
 The stage tables in `CLAUDE.md` describe a target design. These parts of it do not exist: **ArgoCD / GitOps** (deploys run `helm upgrade` directly from `deploy-backend.yaml` / `deploy-frontend.yaml` — no workflow references ArgoCD), **Jira ticketing**, **Slack notifications**, the **AI Remediation Agent** (no auto-created fix PRs), and **Falco**.
 
-### Known-bad, upstream
+### Corrected — KubeArmor was not broken
 
-- **KubeArmor produces no policy alerts** in this environment, so `scan_status.deployed-app.kubearmor` reports `NO_SIGNAL`. Ten hypotheses were eliminated; container detection stops after startup while pod detection continues, and a `Block` policy on `/bin/ls` does not block. Environment: containerd 2.1.7, kernel 6.12.85+ COS, GKE 1.35. Full investigation in [`helm/bootstrap/README.md`](helm/bootstrap/README.md). `NO_SIGNAL` exists precisely so "the tool found nothing" cannot be read as "there is nothing to find".
+For most of this project's life `scan_status.deployed-app.kubearmor` reported `NO_SIGNAL`, and two investigations concluded it was an upstream containerd 2.x defect. **That was wrong.** KubeArmor produces the expected alerts — verified end to end on the live cluster, through daemonset → relay → `karmor` → normalizer, with correct policy name, severity and MITRE tag.
+
+The real cause was an **idle capture window**. KubeArmor records what happens while its window is open; every policy matches operator-style behaviour (shell execution, sensitive file reads, payload tools) and a steady-state web app does none of it. The window opened, nothing happened, it closed empty. `NO_SIGNAL` was the correct report of a correct-but-empty capture — the mechanism working exactly as designed, on an input that carried no information.
+
+`.github/scripts/exercise-kubearmor-policies.sh` now generates that behaviour during the window, the same active-probing model ZAP uses for DAST. Full correction, including what the earlier investigation probably hit and two caveats that remain open (file-path policies, alert throttling), in [`helm/bootstrap/README.md`](helm/bootstrap/README.md).
+
+`NO_SIGNAL` itself stays. It remains the honest answer whenever a bounded capture is genuinely quiet, and it is still the reason this was visible at all rather than being reported as a clean runtime domain.
 
 ### Deliberate, not defects
 

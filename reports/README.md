@@ -63,11 +63,21 @@ that correlation is the reason this pipeline exists.
 
 **Honest gaps.** `scan_status.deployed-app.kubearmor` is `NO_SIGNAL`, and the
 model surfaces it in `assumptions_and_unknowns` rather than treating an empty
-runtime domain as a clean one. KubeArmor runs and enforces but produces no
-policy alerts in this environment (see
-[`../helm/bootstrap/README.md`](../helm/bootstrap/README.md) for the
-investigation). `NO_SIGNAL` exists precisely so "the tool found nothing"
-cannot be mistaken for "there is nothing to find".
+runtime domain as a clean one. `NO_SIGNAL` exists precisely so "the tool found
+nothing" cannot be mistaken for "there is nothing to find".
+
+This report was generated before that gap was understood. At the time it was
+believed to be an upstream KubeArmor defect; it was not. KubeArmor works, and
+the capture window was simply idle — a steady-state web app never execs the
+shells the policies watch for, so a bounded capture recorded nothing. The
+window is now exercised during the scan (see
+[`../helm/bootstrap/README.md`](../helm/bootstrap/README.md)), and a report
+regenerated today would carry real runtime findings here.
+
+The report is kept as generated rather than re-run, because what it
+demonstrates is the point: the pipeline surfaced an absent signal instead of
+quietly rendering an empty runtime domain as a clean one, and that is what
+made the gap findable at all.
 
 The model also flagged, unprompted, that the infrastructure scan was 28 days
 stale relative to the release — from the provenance block, which records

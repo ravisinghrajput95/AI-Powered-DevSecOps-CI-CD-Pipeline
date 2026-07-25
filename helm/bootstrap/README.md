@@ -24,10 +24,71 @@ looked like a bug in this repository rather than a missing prerequisite:
 | `KubeArmorConfig` CR | Operator installs but never deploys the DaemonSet or registers the policy CRD |
 | `kubearmor-visibility` namespace annotation | Required by KubeArmor for per-namespace visibility. **Not sufficient on its own** — see the known issue below. |
 
-## Known issue: KubeArmor produces no `MatchedPolicy` alerts
+## KubeArmor alerting — RESOLVED 2026-07-25
 
-**Unresolved as of 2026-07-25.** KubeArmor installs, enforces, and reports
-telemetry correctly, but no policy ever matches, so
+**KubeArmor works. It was never the bug.** Two investigations concluded this
+was an upstream containerd 2.x defect. That conclusion was wrong, and the
+correction is more useful than the original write-up, so both are kept.
+
+Verified end to end on the live cluster:
+
+```
+$ karmor logs --json --logFilter=policy   # while exec'ing a shell in a pod
+PolicyName: ksp-backend-block-shell-exec
+Severity:   8
+Action:     Audit
+Resource:   /bin/bash -c id
+Message:    Unexpected shell execution in the backend container
+Tags:       MITRE-T1059,command-injection-defense
+```
+
+Reproduced repeatedly across backend and frontend pods, through the full
+chain — daemonset → relay → `karmor` → `normalize_kubearmor.py` → 2 canonical
+findings with severity correctly mapped (8 → `critical`, 7 → `high`).
+
+**The actual cause of `NO_SIGNAL` was an idle capture window.** KubeArmor
+records what happens while the window is open. Every policy under
+`policies/kubearmor/` matches operator-style behaviour — shell execution,
+reading `/etc/shadow`, payload tools. CloudCart in steady state serves HTTP
+and does none of it. So the window opened, nothing happened, and it closed
+empty. `NO_SIGNAL` was the correct report of a correct-but-empty capture.
+
+The fix is `.github/scripts/exercise-kubearmor-policies.sh`, which generates
+the behaviour during the window — the same active-probing model ZAP uses for
+DAST. You do not learn whether runtime detection works by watching an idle
+app.
+
+**What the earlier investigation probably hit.** It recorded exactly one
+`MatchedPolicy` alert that "did not reproduce". At that time the DaemonSet had
+been running since before the workload pods stabilised, and its startup logs
+are full of `Failed to update containerd container <id>: task not found` —
+containers detected but never enriched, so their policy maps were never keyed.
+After a DaemonSet restart against already-running workloads, enumeration
+succeeds and matching is reliable. This is stated as the probable mechanism,
+not a proven one: the restart was not performed as a controlled experiment,
+and the original conditions no longer exist to re-test against.
+
+Two caveats that remain honestly open:
+
+- **File-path policies did not produce alerts** in testing, while process
+  policies did, consistently. One of them cannot fire as written: the
+  serviceaccount token is a symlink to `..data/token` and KubeArmor matches
+  resolved paths. `/etc/shadow` is a direct path and still produced nothing.
+  Unexplained; the exercise script deliberately sticks to process triggers
+  rather than generating activity that reliably produces nothing.
+- **Alert throttling deduplicates.** `maxAlertPerSec:10, throttleSec:30`, so
+  four shell execs across two pods yield two alerts, not four. Expected, and
+  worth knowing before reading a capture as under-counting.
+
+The original investigation follows, unedited. It is accurate about what was
+observed and wrong in its conclusion, which is the more instructive artifact.
+
+---
+
+## Original investigation (superseded — conclusion was wrong)
+
+**Believed unresolved as of 2026-07-25.** KubeArmor installs, enforces, and
+reports telemetry correctly, but no policy ever matches, so
 `normalized-kubearmor.json` is always `[]` and the runtime domain silently
 loses its most important signal. It looks healthy from every angle, which
 is why this is written down rather than left to be rediscovered.
