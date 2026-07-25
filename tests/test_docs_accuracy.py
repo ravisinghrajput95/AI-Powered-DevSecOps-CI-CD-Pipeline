@@ -11,6 +11,7 @@ These assert only claims with one verifiable answer. Nothing here polices
 wording.
 """
 import glob
+import json
 import os
 import re
 import subprocess
@@ -105,4 +106,40 @@ def test_committed_sample_report_leaks_no_live_infrastructure():
                 offenders.append("{}: {}".format(os.path.relpath(path, ROOT), found))
     assert not offenders, (
         "live host addresses in committed reports:\n  " + "\n  ".join(sorted(offenders))
+    )
+
+
+def test_scan_coverage_claim_matches_the_run_ledger():
+    """reports/README.md states how many scanners reported SUCCESS.
+
+    That number was wrong when first written — claimed 17, actually 19 —
+    because it was counted by hand from a status block nested two levels deep.
+    reports/run_ledger.jsonl records the real counts per run, so the claim is
+    now checkable against the recorded row for the committed report rather
+    than against someone's arithmetic.
+    """
+    readme = os.path.join(ROOT, "reports", "README.md")
+    text = open(readme, encoding="utf-8").read()
+
+    claim = re.search(r"\*\*(\d+) of (\d+) scanners", text)
+    assert claim, "reports/README.md no longer states a scan-coverage claim"
+    claimed_success, claimed_total = int(claim.group(1)), int(claim.group(2))
+
+    report_id = re.search(r"\*\*Report ID\*\* \| `([0-9a-f]+)`", text)
+    assert report_id, "reports/README.md no longer states a Report ID"
+
+    ledger = os.path.join(ROOT, "reports", "run_ledger.jsonl")
+    if not os.path.exists(ledger):
+        pytest.skip("run ledger not present")
+    rows = [json.loads(line) for line in open(ledger, encoding="utf-8") if line.strip()]
+    match = [r for r in rows if r.get("report_id") == report_id.group(1)]
+    assert match, (
+        "the report committed in reports/sample/ ({}) has no row in the run ledger — "
+        "record it with scripts/run_ledger.py".format(report_id.group(1))
+    )
+    row = match[0]
+    assert (claimed_success, claimed_total) == (row["scanners_success"], row["scanners_total"]), (
+        "reports/README.md claims {}/{} scanners SUCCESS; the ledger records {}/{} for "
+        "report {}.".format(claimed_success, claimed_total,
+                            row["scanners_success"], row["scanners_total"], row["report_id"])
     )

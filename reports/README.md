@@ -13,7 +13,7 @@ have no way to see what the AI Release Intelligence Engine actually outputs.
 | **Verdict** | `DO_NOT_APPROVE` — health CRITICAL, deployment confidence LOW |
 | **Findings** | 240 across 4 domains, 9 tools |
 | **Correlations** | 7 cross-domain |
-| **Scan coverage** | **17 of 17 scanners `SUCCESS`** |
+| **Scan coverage** | **19 of 19 scanners `SUCCESS`** |
 
 Domain split: `application_security` 127, `container_security` 57,
 `infrastructure_security` 32, `runtime_security` 24.

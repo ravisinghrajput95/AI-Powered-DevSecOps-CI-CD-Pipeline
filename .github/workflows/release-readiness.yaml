@@ -519,6 +519,34 @@ jobs:
             --release-context final_release_context.json \
             --output release_report.html
 
+      # Nothing measures whether the model gives the same answer twice, and
+      # that is the first thing anyone asks about an LLM in a release gate.
+      # Rather than commission N runs to find out, record what each real run
+      # produced — the stability table builds itself over time at no extra
+      # cost. The row is printed to the job summary rather than committed
+      # from CI: main is a protected branch, and a bot commit on every run
+      # would be far more machinery than one appended line is worth.
+      - name: Record run in the stability ledger
+        if: ${{ inputs.run_ai_analysis }}
+        run: |
+          python3 scripts/run_ledger.py record \
+            --executive-report executive_report.json \
+            --release-context final_release_context.json \
+            --model "${ANTHROPIC_MODEL}" \
+            --ledger run_ledger_row.jsonl
+          {
+            echo "### Run ledger"
+            echo
+            echo "Append this line to \`reports/run_ledger.jsonl\` to keep the"
+            echo "stability history current, then run \`python3 scripts/run_ledger.py summary\`."
+            echo
+            echo '```json'
+            cat run_ledger_row.jsonl
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          ANTHROPIC_MODEL: ${{ inputs.model || 'claude-sonnet-4-6' }}
+
       - name: Upload AI Security Report
         if: ${{ inputs.run_ai_analysis }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -527,3 +555,4 @@ jobs:
           path: |
             release_report.md
             release_report.html
+            run_ledger_row.jsonl

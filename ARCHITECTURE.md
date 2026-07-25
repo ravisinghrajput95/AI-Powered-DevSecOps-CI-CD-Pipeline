@@ -142,7 +142,7 @@ AI-authored fields: `executive_summary`, `cross_domain_correlations[]`, `top_ris
 
 ## Test suite
 
-545 automated tests in `tests/`:
+546 automated tests in `tests/`:
 
 - Schema validation for both contracts, against golden fixtures and real frozen CI artifacts.
 - Evidence-citation integrity — every cited `finding_id` must exist in real findings. This is the single highest-value check: it's the exact test that would have caught a real citation bug from an early run (a transposed character in a `finding_id`, cited twice with two slightly different values).
@@ -158,6 +158,16 @@ python3 -m pytest
 - API request shape (`tests/test_api_request_shape.py`) — `temperature` pinned, `tool_choice` forced, API key in the header not the body. `urlopen` is stubbed, so no network call and no key.
 - Offline demo integrity (`tests/test_demo_report.py`) — the nine fixture pairs `scripts/demo_report.py` renders are referenced by filename and read by nothing else in the suite, so a renamed fixture would break the one entry point a stranger actually runs while every other test stayed green. The end-to-end case strips `ANTHROPIC_API_KEY` from the child environment, making "needs no API key" a checked claim.
 - Documentation accuracy (`tests/test_docs_accuracy.py`) — the test count, Kyverno/KubeArmor policy counts and workflow count claimed in `README.md`, `ARCHITECTURE.md` and `CLAUDE.md` are compared against reality, and no committed report may contain a live host address. A number a reader can check and find wrong discredits the numbers they cannot check.
+
+### Run stability
+
+`reports/run_ledger.jsonl` records one row per real AI run — verdict, confidence, counts, and the coarse themes of its correlations. `scripts/run_ledger.py summary` reports how often each theme recurs.
+
+This is deliberately the cheap tenth of an evaluation harness. The expensive nine tenths — hand-authored expected correlations per fixture, a scoring function, and runs commissioned purely to measure — were considered and rejected: labelling ground truth for nine fixtures is days of judgement work needing maintenance whenever a fixture changes, to grade a system whose verdict turns out to be the stable part. Recording runs you are already paying for costs nothing and answers the question people actually ask.
+
+Variance is only meaningful over identical evidence, so `summary` groups by release version and separates within-group stability from cross-commit spread. Reading a cross-commit difference as model noise would be the same class of overstatement this pipeline exists to prevent.
+
+Across the first four recorded runs (all `claude-sonnet-4-6`, different commits): the verdict was `DO_NOT_APPROVE` in every one, `top_risks` was 8 in every one, correlations ranged 5–7, and 4 of 8 correlation themes appeared in all four. The decision is stable; the reasoning around it is roughly half stable. Those runs did not share evidence, so that figure is an upper bound on model variance, not a measurement of it.
 
 ## Known gaps
 
