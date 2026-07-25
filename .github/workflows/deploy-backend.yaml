@@ -97,6 +97,28 @@ jobs:
 
       - name: Deploy backend via Helm
         run: |
+          # --atomic behaves very differently on install vs upgrade. On an
+          # UPGRADE it rolls back to the previous good release: correct, and
+          # what we want. On a FIRST INSTALL there is nothing to roll back
+          # to, so Helm UNINSTALLS the whole release — deleting the failed
+          # pods, jobs and events that explain why it failed.
+          #
+          # Hit for real on 2026-07-25: the cloudcart-db-init post-install
+          # hook hung on a missing ConfigMap, --atomic uninstalled
+          # everything, and the failure had to be reconstructed from pod
+          # state captured mid-run because Helm had already destroyed it.
+          #
+          # Timeout raised 180s -> 600s for the same reason: a cold start of
+          # backend + frontend + postgres on a fresh node pool (image pulls,
+          # PVC binding, the db-init hook) genuinely exceeds three minutes,
+          # and the old value turned "slow" into "deleted".
+          if helm status ${{ env.RELEASE_NAME }} -n ${{ env.NAMESPACE }} >/dev/null 2>&1; then
+            ATOMIC="--atomic"
+            echo "Existing release found — deploying with --atomic (rollback on failure)."
+          else
+            ATOMIC=""
+            echo "First install — deploying WITHOUT --atomic so a failed release stays inspectable."
+          fi
           helm upgrade --install ${{ env.RELEASE_NAME }} ${{ env.CHART_PATH }} \
             --namespace ${{ env.NAMESPACE }} \
             --set backend.image.repository=${{ env.BACKEND_IMAGE }} \
@@ -107,9 +129,9 @@ jobs:
             --set backend.db.username=${{ secrets.DB_USERNAME }} \
             --set backend.db.password=${{ secrets.DB_PASSWORD }} \
             --reuse-values \
-            --atomic \
+            $ATOMIC \
             --wait \
-            --timeout 180s
+            --timeout 600s
 
       - name: Verify backend rollout
         run: |

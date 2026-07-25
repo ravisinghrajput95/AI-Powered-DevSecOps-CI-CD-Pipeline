@@ -83,14 +83,27 @@ jobs:
 
       - name: Deploy frontend via Helm
         run: |
+          # See deploy-backend.yaml for the full reasoning. Short version:
+          # --atomic rolls back on an UPGRADE (good) but UNINSTALLS on a
+          # first INSTALL, destroying the failed pods and events that
+          # explain the failure. Timeout raised 120s -> 600s because a cold
+          # start on a fresh node pool exceeds two minutes and the old value
+          # turned "slow" into "deleted".
+          if helm status ${{ env.RELEASE_NAME }} -n ${{ env.NAMESPACE }} >/dev/null 2>&1; then
+            ATOMIC="--atomic"
+            echo "Existing release found — deploying with --atomic (rollback on failure)."
+          else
+            ATOMIC=""
+            echo "First install — deploying WITHOUT --atomic so a failed release stays inspectable."
+          fi
           helm upgrade --install ${{ env.RELEASE_NAME }} ${{ env.CHART_PATH }} \
             --namespace ${{ env.NAMESPACE }} \
             --set frontend.image.repository=${{ env.FRONTEND_IMAGE }} \
             --set frontend.image.tag=${{ github.event.workflow_run.head_sha }} \
             --reuse-values \
-            --atomic \
+            $ATOMIC \
             --wait \
-            --timeout 120s
+            --timeout 600s
 
       - name: Verify frontend rollout
         run: |

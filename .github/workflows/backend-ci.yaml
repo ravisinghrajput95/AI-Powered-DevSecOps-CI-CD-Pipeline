@@ -1,5 +1,35 @@
 name: Backend CI
 
+# ─────────────────────────────────────────────────────────────────────
+# NOTE ON DUPLICATION — this overlaps heavily with frontend-ci.yaml, and that is
+# DELIBERATE. Do not merge them into a reusable (workflow_call) workflow.
+#
+# The docker job signs its image with Cosign keyless signing, and
+# deploy-backend.yaml gates deployment on:
+#
+#   cosign verify --certificate-identity \
+#     ".../.github/workflows/backend-ci.yaml@refs/heads/main"
+#
+# Cosign binds the certificate to the workflow file that requested the OIDC
+# token. Inside a reusable workflow the token's job_workflow_ref — and
+# therefore the certificate SAN — becomes the REUSABLE workflow's path, not
+# this caller's. Two consequences:
+#
+#   1. cosign verify fails and deploys stop (fail-closed, so at least loud).
+#   2. "Fixing" it by pointing --certificate-identity at the shared workflow
+#      makes backend and frontend images signed by the SAME identity. The
+#      certificate would no longer prove which pipeline built which image,
+#      so a compromised frontend pipeline could sign a backend image.
+#
+# That is a real provenance regression traded for tidier YAML. The jobs that
+# are safe to share (lint/test/build) are also the ones that differ most
+# (setup-python + black/flake8/isort vs setup-node + ESLint), so there is
+# little left to gain.
+#
+# Assessed 2026-07-25. If this is revisited, verify with a real signed image
+# that the certificate identity still binds per component before merging.
+# ─────────────────────────────────────────────────────────────────────
+
 on:
   push:
     branches:
