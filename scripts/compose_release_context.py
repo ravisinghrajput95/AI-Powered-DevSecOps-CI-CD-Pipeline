@@ -113,6 +113,10 @@ SCAN_STATUS_MAP = {
     "failed": "FAILED",
     "skipped": "SKIPPED",
     "not_configured": "NOT_CONFIGURED",
+    # A tool that ran to completion and produced nothing usable — neither a
+    # success nor a failure. See release_context_schema.SCAN_STATUS_VALUES
+    # for why the other four all misreport this case.
+    "no_signal": "NO_SIGNAL",
 }
 
 

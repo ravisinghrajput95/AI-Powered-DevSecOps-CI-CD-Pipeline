@@ -29,7 +29,20 @@ was never tightly specified.
 SEVERITY_VALUES = ["critical", "high", "medium", "low", "informational"]
 DOMAIN_VALUES = ["application_security", "infrastructure_security", "runtime_security", "container_security"]
 TYPE_VALUES = ["security", "quality"]
-SCAN_STATUS_VALUES = ["SUCCESS", "FAILED", "SKIPPED", "NOT_CONFIGURED"]
+# NO_SIGNAL added 2026-07-25 for a real, previously unrepresentable case:
+# a scanner that runs to completion, exits cleanly, and produces no usable
+# output. KubeArmor is the motivating example — the DaemonSet enforces,
+# policies load, telemetry flows, `karmor logs` connects and captures for
+# its full window, and the result is an empty finding set because no policy
+# ever matches. Every existing value misreports that:
+#   SUCCESS        -> reads as "ran, and the runtime is clean" (it is not;
+#                     it is unmeasured, which is the dangerous reading)
+#   FAILED         -> untrue, nothing failed
+#   SKIPPED        -> untrue, it ran
+#   NOT_CONFIGURED -> untrue, it is configured
+# This is the one silent-zero shape an exit code cannot catch, because the
+# exit code is genuinely 0.
+SCAN_STATUS_VALUES = ["SUCCESS", "FAILED", "SKIPPED", "NOT_CONFIGURED", "NO_SIGNAL"]
 VERIFICATION_STATUS_VALUES = ["SUCCESS", "FAILED", "UNKNOWN", "SKIPPED"]
 
 FINDING_SCHEMA = {

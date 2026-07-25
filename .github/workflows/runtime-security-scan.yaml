@@ -408,13 +408,44 @@ jobs:
     needs: [zap-baseline-scan, kyverno-live-scan, kubearmor-live-scan]
     if: always()
     steps:
+      - name: Download normalized kubearmor findings
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: normalized-kubearmor
+          path: ka/
+
+      # kubearmor needs a distinct status from the other two. Its job
+      # genuinely succeeds — karmor connects to the relay, captures for the
+      # full window, writes a valid file — while producing an empty finding
+      # set because no policy ever matches (see helm/bootstrap/README.md for
+      # the six hypotheses tested and eliminated). Reporting that as SUCCESS
+      # tells the model "runtime scanned, nothing found", i.e. clean, when
+      # the truth is UNMEASURED. NO_SIGNAL exists for exactly this shape and
+      # is the one silent-zero an exit code cannot detect, because the exit
+      # code is legitimately 0.
       - name: Record scan status
         run: |
+          KA_RESULT="${{ needs.kubearmor-live-scan.result }}"
+          if [ "$KA_RESULT" = "success" ]; then
+            if [ -s ka/normalized-kubearmor.json ] \
+               && python3 -c "import json,sys; sys.exit(0 if json.load(open('ka/normalized-kubearmor.json')) else 1)" 2>/dev/null; then
+              KA_STATUS="success"
+            else
+              KA_STATUS="no_signal"
+              echo "::warning::KubeArmor ran successfully but captured no policy alerts. Recording NO_SIGNAL — the runtime domain is UNMEASURED, not clean. See helm/bootstrap/README.md."
+            fi
+          else
+            KA_STATUS="$KA_RESULT"
+          fi
+          echo "kubearmor status: $KA_STATUS"
+
           cat > scan_status_deployed_app.json << EOF
           {
             "zap": "${{ needs.zap-baseline-scan.result }}",
             "kyverno": "${{ needs.kyverno-live-scan.result }}",
-            "kubearmor": "${{ needs.kubearmor-live-scan.result }}"
+            "kubearmor": "$KA_STATUS"
           }
           EOF
           cat scan_status_deployed_app.json

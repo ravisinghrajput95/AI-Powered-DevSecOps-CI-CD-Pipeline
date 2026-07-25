@@ -127,14 +127,18 @@ around):
   across every finding in that category. Look it up; don't expect it
   repeated per finding.
 - `scan_status` — keyed by component, then tool, values are exactly one
-  of `SUCCESS` / `FAILED` / `SKIPPED` / `NOT_CONFIGURED`. These are four
-  different facts: `SKIPPED` means the check exists but didn't run this
-  time; `NOT_CONFIGURED` means no status-reporting mechanism exists for
-  that tool at all (this does NOT mean the tool didn't run — e.g.
-  `snyk`/`syft` container-scan status is `NOT_CONFIGURED` by a known,
-  documented platform gap even when real findings from that scan are
-  present in `findings`). Never treat an empty findings set as "clean"
-  without checking this first.
+  of `SUCCESS` / `FAILED` / `SKIPPED` / `NOT_CONFIGURED` / `NO_SIGNAL`.
+  These are five different facts:
+  `SKIPPED` means the check exists but didn't run this time;
+  `NOT_CONFIGURED` means no status-reporting mechanism exists for that
+  tool at all (this does NOT mean the tool didn't run);
+  `NO_SIGNAL` means the tool ran to completion and produced no usable
+  output — it is neither a success nor a failure, and an empty finding set
+  under `NO_SIGNAL` means that area is **UNMEASURED, not clean**.
+  Treat a `NO_SIGNAL` domain as a gap in evidence: say so explicitly in
+  `assumptions_and_unknowns`, and do not let its absence of findings raise
+  your confidence in the release. Never treat an empty findings set as
+  "clean" without checking this first.
 - `release_statistics` — `total_findings`, `by_severity`, `by_category`,
   `by_component`, `by_domain`. Pre-computed. Use directly, always.
 - `signal_availability` — a factual statement of which prioritization
