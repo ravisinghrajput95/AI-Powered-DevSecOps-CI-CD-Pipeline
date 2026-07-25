@@ -1,0 +1,21 @@
+# Backend development tooling — formatters and linters only.
+#
+# Required by the `backend/**/*.py` lint-staged step in .husky/pre-commit
+# (black + flake8 + isort) and by the lint job in backend-ci.yaml. Without
+# these installed the pre-commit hook's Python step fails on a clean
+# machine, which is why they are declared here rather than assumed present.
+#
+# Deliberately NOT in requirements.txt: these are never needed to run the
+# app, only to work on it. Nothing here ships in a Docker image.
+#
+# Config lives elsewhere and is shared with CI, not duplicated:
+#   black + isort  -> backend/pyproject.toml
+#   flake8         -> setup.cfg (repo root)
+#
+# Ranges, not exact pins, matching requirements.txt's existing style — a
+# formatter minor bump reformatting the codebase mid-sprint is the failure
+# mode worth guarding against, and the major-version caps do that.
+
+black>=24.0,<26
+flake8>=7.0,<8
+isort>=5.13,<7

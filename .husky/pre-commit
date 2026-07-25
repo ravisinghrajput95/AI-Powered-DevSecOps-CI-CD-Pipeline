@@ -12,4 +12,46 @@ ggshield secret scan pre-commit || {
   echo "  ggshield secret ignore --last-found"
 }
 
+# Test steps run last so the GitGuardian warning above is always visible,
+# even when a test failure blocks the commit.
+#
+# Each suite runs ONLY when its own files are staged, and is skipped with a
+# loud message when its tooling isn't installed. A missing tool must never
+# block a commit that would otherwise succeed — that is the difference
+# between "this test failed" and "this machine isn't set up", and only the
+# first is a reason to stop a commit.
+staged_matches() {
+  git diff --cached --name-only --diff-filter=ACMR | grep -qE "$1"
+}
+
+if staged_matches '^(scripts|tests)/'; then
+  echo "Running pipeline test suite (scripts/ or tests/ changed)..."
+  if ! python3 -c 'import pytest, jsonschema' 2>/dev/null; then
+    echo "  SKIPPED: pytest/jsonschema not installed in this environment."
+    echo "  To enable: pip install -r tests/requirements.txt"
+  elif python3 -m pytest tests/ -q; then
+    echo "  Pipeline tests passed."
+  else
+    echo ""
+    echo "Pipeline tests FAILED — commit blocked."
+    echo "Fix the failures above, or bypass with: git commit --no-verify"
+    exit 1
+  fi
+fi
+
+if staged_matches '^frontend/'; then
+  echo "Running frontend tests (frontend/ changed)..."
+  if [ ! -d frontend/node_modules ]; then
+    echo "  SKIPPED: frontend/node_modules missing."
+    echo "  To enable: cd frontend && npm install"
+  elif (cd frontend && npm test --silent); then
+    echo "  Frontend tests passed."
+  else
+    echo ""
+    echo "Frontend tests FAILED — commit blocked."
+    echo "Fix the failures above, or bypass with: git commit --no-verify"
+    exit 1
+  fi
+fi
+
 echo "Pre-commit checks passed!"

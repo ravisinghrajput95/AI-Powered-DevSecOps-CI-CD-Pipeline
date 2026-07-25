@@ -1,0 +1,42 @@
+# Dependabot VERSION UPDATES (the PR-opening feature). Separate from
+# Dependabot security ALERTS, which are a repo-settings toggle, need no
+# config file, and are what feeds Dependabot findings into the pipeline.
+#
+# DELIBERATE: all ecosystems below stay enabled even though this repo's
+# app dependencies are intentionally vulnerable. Expect weekly PRs that
+# would upgrade away the intentional vulns (see the pip note below) —
+# these are reviewed and closed by hand, not merged. Only the
+# github-actions entry produces PRs that should normally be merged.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    # NOTE: pip scans EVERY requirements*.txt in this directory, not just
+    # requirements.txt — so requirements-vulnerable.txt (intentional CVEs,
+    # consumed by backend/Dockerfile) and requirements-dev.txt are both
+    # included. PRs touching requirements-vulnerable.txt must be closed:
+    # merging one removes demo findings the AI release reports depend on.
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

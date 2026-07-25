@@ -47,7 +47,10 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install linting tools
-        run: pip install black flake8 isort
+        # Same manifest the pre-commit hook's formatters come from, so CI and
+        # local hooks can't drift onto different black/isort versions and
+        # disagree about formatting.
+        run: pip install -r backend/requirements-dev.txt
 
       - name: Check formatting with black
         run: python -m black --check .
@@ -120,6 +123,14 @@ jobs:
       contents: read
       id-token: write
     needs: test
+    # Skipped for Dependabot PRs. Dependabot runs against a separate secrets
+    # store, so secrets.GCP_WIF_PROVIDER / GCP_SERVICE_ACCOUNT resolve to
+    # empty strings here and the GCP auth step fails — a permissions fact,
+    # not a broken build. Lint, tests, and the security scans all still run,
+    # which is what actually matters for reviewing a dependency bump; only
+    # the registry push is skipped. A `skipped` job does not fail the run,
+    # so deploy-backend.yaml's `conclusion == 'success'` guard still holds.
+    if: github.actor != 'dependabot[bot]'
 
     steps:
       - name: Checkout code
