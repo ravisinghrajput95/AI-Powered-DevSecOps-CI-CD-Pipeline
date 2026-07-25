@@ -21,107 +21,148 @@ from routes.profile import profile_bp
 from routes.reviews import reviews_bp
 from routes.vulnerable import vuln_bp
 
-app = Flask(__name__)
-app.config["SECRET_KEY"] = SECRET_KEY
-app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["DEBUG"] = DEBUG
-app.config["SESSION_COOKIE_SECURE"] = False
-app.config["SESSION_COOKIE_HTTPONLY"] = False
 
-# VULN: CORS allows all origins
-CORS(app, origins="*", supports_credentials=True)
+def create_app(config_overrides=None, init_db=True):
+    """Application factory.
 
-db.init_app(app)
+    Previously this module built the app at import time and, at the bottom,
+    ran `db.create_all()` and `seed_admin()` inside a `with app.app_context()`
+    block. That meant importing app.py opened a real database connection, so:
 
-# Register blueprints
-app.register_blueprint(auth_bp, url_prefix="/api/auth")
-app.register_blueprint(products_bp, url_prefix="/api/products")
-app.register_blueprint(cart_bp, url_prefix="/api/cart")
-app.register_blueprint(orders_bp, url_prefix="/api/orders")
-app.register_blueprint(reviews_bp, url_prefix="/api/reviews")
-app.register_blueprint(admin_bp, url_prefix="/api/admin")
-app.register_blueprint(vuln_bp, url_prefix="/api/vuln")
-app.register_blueprint(profile_bp, url_prefix="/api/profile")
-app.register_blueprint(metrics_bp)
+      - tests could not import the app without a live database, which is why
+        backend/tests only ever asserted on module structure
+      - every gunicorn worker re-ran create_all() and the admin seed on boot
+      - `seed_admin()` referenced `User`, which only became a module global
+        because of an import several lines BELOW the function definition —
+        it worked purely by call ordering
 
+    None of the intentional vulnerabilities change here. The insecure CORS,
+    session flags, debug mode, hardcoded config and /api/config exposure are
+    all preserved exactly; only the initialisation side effects move behind
+    an explicit call.
 
-@app.before_request
-def before_request():
-    g.start_time = time.time()
+    init_db=False lets tests build a real app (and use test_client) without
+    touching a database.
+    """
+    app = Flask(__name__)
+    app.config["SECRET_KEY"] = SECRET_KEY
+    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["DEBUG"] = DEBUG
+    # VULN: insecure session cookies (unchanged)
+    app.config["SESSION_COOKIE_SECURE"] = False
+    app.config["SESSION_COOKIE_HTTPONLY"] = False
+    if config_overrides:
+        app.config.update(config_overrides)
 
+    # VULN: CORS allows all origins (unchanged)
+    CORS(app, origins="*", supports_credentials=True)
 
-@app.after_request
-def after_request(response):
-    if METRICS_ENABLED and request.endpoint:
-        duration = time.time() - g.get("start_time", time.time())
-        REQUEST_COUNT.labels(
-            method=request.method,
-            endpoint=request.endpoint or "unknown",
-            status=response.status_code,
-        ).inc()
-        REQUEST_LATENCY.labels(
-            method=request.method,
-            endpoint=request.endpoint or "unknown",
-        ).observe(duration)
-    return response
+    db.init_app(app)
 
+    app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    app.register_blueprint(products_bp, url_prefix="/api/products")
+    app.register_blueprint(cart_bp, url_prefix="/api/cart")
+    app.register_blueprint(orders_bp, url_prefix="/api/orders")
+    app.register_blueprint(reviews_bp, url_prefix="/api/reviews")
+    app.register_blueprint(admin_bp, url_prefix="/api/admin")
+    app.register_blueprint(vuln_bp, url_prefix="/api/vuln")
+    app.register_blueprint(profile_bp, url_prefix="/api/profile")
+    app.register_blueprint(metrics_bp)
 
-@app.route("/health")
-def health():
-    return jsonify({"status": "healthy", "service": "cloudcart-api"})
+    register_request_hooks(app)
+    register_core_routes(app)
 
+    if init_db:
+        with app.app_context():
+            db.create_all()
+            seed_admin()
 
-@app.route("/")
-def index():
-    return jsonify(
-        {
-            "name": "CloudCart API",
-            "version": "1.0.0",
-            "warning": "INTENTIONALLY INSECURE - DevSecOps training only",
-            "endpoints": {
-                "auth": "/api/auth",
-                "products": "/api/products",
-                "cart": "/api/cart",
-                "orders": "/api/orders",
-                "reviews": "/api/reviews",
-                "admin": "/api/admin",
-                "metrics": "/metrics",
-            },
-        }
-    )
+    return app
 
 
-@app.route("/api/config")
-def expose_config():
-    """VULN: Sensitive information exposure"""
-    from config import (
-        ADMIN_PASSWORD,
-        AWS_ACCESS_KEY,
-        AWS_SECRET_KEY,
-        DATABASE_URL,
-        JWT_SECRET,
-        SECRET_KEY,
-        STRIPE_API_KEY,
-    )
+def register_request_hooks(app):
+    @app.before_request
+    def before_request():
+        g.start_time = time.time()
 
-    return jsonify(
-        {
-            "secret_key": SECRET_KEY,
-            "jwt_secret": JWT_SECRET,
-            "database_url": DATABASE_URL,
-            "aws_access_key": AWS_ACCESS_KEY,
-            "aws_secret_key": AWS_SECRET_KEY,
-            "stripe_api_key": STRIPE_API_KEY,
-            "admin_password": ADMIN_PASSWORD,
-            "debug": DEBUG,
-        }
-    )
+    @app.after_request
+    def after_request(response):
+        if METRICS_ENABLED and request.endpoint:
+            duration = time.time() - g.get("start_time", time.time())
+            REQUEST_COUNT.labels(
+                method=request.method,
+                endpoint=request.endpoint or "unknown",
+                status=response.status_code,
+            ).inc()
+            REQUEST_LATENCY.labels(
+                method=request.method,
+                endpoint=request.endpoint or "unknown",
+            ).observe(duration)
+        return response
+
+
+def register_core_routes(app):
+    @app.route("/health")
+    def health():
+        return jsonify({"status": "healthy", "service": "cloudcart-api"})
+
+    @app.route("/")
+    def index():
+        return jsonify(
+            {
+                "name": "CloudCart API",
+                "version": "1.0.0",
+                "warning": "INTENTIONALLY INSECURE - DevSecOps training only",
+                "endpoints": {
+                    "auth": "/api/auth",
+                    "products": "/api/products",
+                    "cart": "/api/cart",
+                    "orders": "/api/orders",
+                    "reviews": "/api/reviews",
+                    "admin": "/api/admin",
+                    "metrics": "/metrics",
+                },
+            }
+        )
+
+    @app.route("/api/config")
+    def expose_config():
+        """VULN: Sensitive information exposure"""
+        from config import (
+            ADMIN_PASSWORD,
+            AWS_ACCESS_KEY,
+            AWS_SECRET_KEY,
+            DATABASE_URL,
+            JWT_SECRET,
+            SECRET_KEY,
+            STRIPE_API_KEY,
+        )
+
+        return jsonify(
+            {
+                "secret_key": SECRET_KEY,
+                "jwt_secret": JWT_SECRET,
+                "database_url": DATABASE_URL,
+                "aws_access_key": AWS_ACCESS_KEY,
+                "aws_secret_key": AWS_SECRET_KEY,
+                "stripe_api_key": STRIPE_API_KEY,
+                "admin_password": ADMIN_PASSWORD,
+                "debug": DEBUG,
+            }
+        )
 
 
 def seed_admin():
-    """Ensure admin user exists with known password for demos."""
+    """Ensure admin user exists with known password for demos.
+
+    `User` is imported here rather than relied upon as a module global set
+    by an import lower down the file — the previous arrangement only worked
+    because of call ordering.
+    """
     from werkzeug.security import generate_password_hash
+
+    from models.user import User
 
     if not User.query.filter_by(username="admin").first():
         admin = User(
@@ -136,13 +177,12 @@ def seed_admin():
         db.session.commit()
 
 
-with app.app_context():
-    from models.user import User
-
-    db.create_all()
-    seed_admin()
-
-
+# Deliberately NO module-level `app = create_app()`. Instantiating at import
+# time is what made this module impossible to import without a live database,
+# and it re-ran create_all() + seed_admin() in every gunicorn worker.
+# Entry points construct the app explicitly:
+#   - gunicorn -> wsgi.py
+#   - `python app.py` -> below
 if __name__ == "__main__":
     # VULN: Debug mode with binding to all interfaces
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    create_app().run(host="0.0.0.0", port=5000, debug=True)
