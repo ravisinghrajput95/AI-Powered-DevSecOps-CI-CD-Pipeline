@@ -1,6 +1,6 @@
 """Guards on factual claims the documentation makes about the repository.
 
-The test count in README.md, ARCHITECTURE.md and CLAUDE.md went stale four
+The test count in README.md and ARCHITECTURE.md went stale four
 times in a single day (507 -> 524 -> 529 -> 533), each time because adding
 tests is exactly the change least likely to prompt someone to reread the
 prose. A number a reader can check and find wrong undermines the numbers they
@@ -21,7 +21,7 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-DOCS_CLAIMING_TEST_COUNT = ["README.md", "ARCHITECTURE.md", "CLAUDE.md"]
+DOCS_CLAIMING_TEST_COUNT = ["README.md", "ARCHITECTURE.md"]
 
 
 def collected_test_count():
@@ -61,13 +61,14 @@ def test_documented_test_count_matches_reality(doc):
         )
 
 
-def test_policy_counts_in_claude_md_match_the_policy_directories():
-    """CLAUDE.md states exact policy counts; they are trivially checkable."""
-    text = open(os.path.join(ROOT, "CLAUDE.md"), encoding="utf-8").read()
+def test_policy_counts_in_readme_match_the_policy_directories():
+    """README's project-structure block states exact policy counts; they are
+    trivially checkable, and were guarded here before CLAUDE.md was removed."""
+    text = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
 
-    kyverno_claimed = re.search(r"kyverno/ \((\d+) ClusterPolicies\)", text)
-    kubearmor_claimed = re.search(r"kubearmor/ \((\d+) policies\)", text)
-    assert kyverno_claimed and kubearmor_claimed, "policy-count claims not found in CLAUDE.md"
+    kyverno_claimed = re.search(r"(\d+) Kyverno ClusterPolicies", text)
+    kubearmor_claimed = re.search(r"(\d+) KubeArmor runtime policies", text)
+    assert kyverno_claimed and kubearmor_claimed, "policy-count claims not found in README.md"
 
     kyverno_actual = sum(
         1 for p in glob.glob(os.path.join(ROOT, "policies", "kyverno", "*.yaml"))
@@ -81,10 +82,10 @@ def test_policy_counts_in_claude_md_match_the_policy_directories():
     assert int(kubearmor_claimed.group(1)) == kubearmor_actual
 
 
-def test_workflow_count_in_claude_md_matches_reality():
-    text = open(os.path.join(ROOT, "CLAUDE.md"), encoding="utf-8").read()
+def test_workflow_count_in_readme_matches_reality():
+    text = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
     claimed = re.search(r"(\d+) CI/CD \+ security workflows", text)
-    assert claimed, "workflow-count claim not found in CLAUDE.md"
+    assert claimed, "workflow-count claim not found in README.md"
     actual = len(glob.glob(os.path.join(ROOT, ".github", "workflows", "*.y*ml")))
     assert int(claimed.group(1)) == actual
 

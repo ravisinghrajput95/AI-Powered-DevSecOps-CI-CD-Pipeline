@@ -2,7 +2,7 @@
 
 [![Test Suite](https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/actions/workflows/tests.yaml/badge.svg)](https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/actions/workflows/tests.yaml)
 [![CodeQL](https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/actions/workflows/codeql.yaml/badge.svg)](https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/actions/workflows/codeql.yaml)
-[![Tests](https://img.shields.io/badge/tests-559%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-558%20passing-brightgreen)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Nine security scanners produce nine incompatible reports, and nobody can tell
@@ -161,11 +161,11 @@ Cloudcart/
 |-- terraform/                # GKE infrastructure
 |-- monitoring/               # Prometheus and Grafana configs
 |-- policies/
-|   |-- kyverno/              # Kyverno cluster policies (pod-security, supply-chain)
-|   `-- kubearmor/            # KubeArmor runtime policies
-|-- .github/workflows/        # CI/CD + AI Release Intelligence pipelines
+|   |-- kyverno/              # 19 Kyverno ClusterPolicies (pod-security, supply-chain)
+|   `-- kubearmor/            # 8 KubeArmor runtime policies
+|-- .github/workflows/        # 14 CI/CD + security workflows
 |-- scripts/                  # Normalizers, ReleaseContext builders, AI agent, renderers
-|-- tests/                    # 559 automated tests + golden regression dataset
+|-- tests/                    # 558 automated tests + golden regression dataset
 |-- docker-compose.yml
 |-- README.md
 ```
@@ -436,7 +436,7 @@ flowchart TD
 
 ### Test suite
 
-559 automated tests (`tests/`) — schema validation, evidence-citation integrity, cross-domain correlation integrity, renderer correctness, and a golden regression dataset covering 8 representative scenarios. Full detail in [ARCHITECTURE.md](ARCHITECTURE.md#test-suite).
+558 automated tests (`tests/`) — schema validation, evidence-citation integrity, cross-domain correlation integrity, renderer correctness, and a golden regression dataset covering 8 representative scenarios. Full detail in [ARCHITECTURE.md](ARCHITECTURE.md#test-suite).
 
 ```bash
 pip install -r tests/requirements.txt
