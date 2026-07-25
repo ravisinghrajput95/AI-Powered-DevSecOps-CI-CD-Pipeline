@@ -1,7 +1,7 @@
 # CLAUDE.md — AI-Powered DevSecOps CI/CD Pipeline
 
 ## Project Overview
-This project builds an AI-powered DevSecOps CI/CD pipeline using GitHub Actions, AWS, and Claude as the AI agent framework. The pipeline runs against **CloudCart** — an intentionally vulnerable 3-tier ecommerce application — to demonstrate real-world AI-assisted security findings, cross-tool exploitability analysis, and automated remediation.
+This project builds an AI-powered DevSecOps CI/CD pipeline using GitHub Actions, Google Cloud (GKE), and Claude as the AI agent framework. The pipeline runs against **CloudCart** — an intentionally vulnerable 3-tier ecommerce application — to demonstrate real-world AI-assisted security findings, cross-tool exploitability analysis, and automated remediation.
 
 ## Target Application — CloudCart
 - **Type**: Intentionally vulnerable 3-tier ecommerce app (monorepo)
@@ -13,14 +13,23 @@ This project builds an AI-powered DevSecOps CI/CD pipeline using GitHub Actions,
 - **Vulnerability approach**: Discovered organically by pipeline tools — not pre-catalogued. AI agents explain findings in plain English and suggest remediations.
 - **Repo structure**:
   ```
-  /frontend        # React app (CloudCart UI)
-  /backend         # Flask app (CloudCart API)
-  /infra           # Kubernetes manifests, Helm charts, Terraform
-  /gitops          # GitOps repo for ArgoCD (Helm values, manifests)
-  /pipeline        # GitHub Actions workflows, AI agent scripts
-  /sbom            # Generated SBOM outputs (sbom.json, sbom.spdx.json)
-  /security        # Aggregated security findings (security-summary.json)
+  /frontend            # React app (CloudCart UI)
+  /backend             # Flask app (CloudCart API)
+  /helm                # Helm charts:
+                       #   bootstrap/  cluster prerequisites — install FIRST
+                       #   postgresql/ database + schema/seed ConfigMaps
+                       #   cloudcart/  the application (backend + frontend subcharts)
+  /terraform           # GKE infrastructure (intentionally misconfigured for Checkov)
+  /policies            # kyverno/ (19 ClusterPolicies), kubearmor/ (8 policies)
+  /scripts             # normalizers, context builders, AI engine, renderers
+  /tests               # 507-test suite for scripts/ (golden + real-world fixtures)
+  /monitoring          # Prometheus/Grafana config
+  /.github/workflows   # 14 CI/CD + security workflows
   ```
+
+  Artifacts (SBOMs, normalized findings, release context, executive report)
+  are produced as workflow artifacts rather than committed directories —
+  there is no /sbom or /security tree.
 
 ---
 
@@ -53,7 +62,7 @@ Two-phase design. Build DevOps layer first, then layer in DevSecOps security gat
 | 3 | PR Merge | GitHub Actions (protected branch) | — | Human approves merge |
 | 4 | Checkout | GitHub Actions/checkout, signed commit, supply chain | AI Verification Agent | Critical/High block |
 | 5 | Lint | Checkstyle, Flake8, PMD, ESLint | AI Verification Agent | Critical/High block |
-| 5a | Secrets Scan | Gitleaks, detect-secrets | AI Secrets Agent | **Always blocks** |
+| 5a | Secrets Scan | GitGuardian (ggshield) | AI Secrets Agent | Report-only (see note) |
 | 6 | SAST | SonarCloud, Bandit | AI SAST Agent | Critical/High block |
 | 6a | GHAS | CodeQL, Secret Scanning, Dependabot | AI CodeQL Agent | Critical/High block |
 | 7a | Unit Tests | PyTest, JUnit, JaCoCo, coverage.py | AI Verification Agent | Critical/High block |
@@ -72,7 +81,7 @@ Two-phase design. Build DevOps layer first, then layer in DevSecOps security gat
 | 10a | SBOM Generation | Syft, CycloneDX → sbom.json, sbom.spdx.json | AI Supply Chain Agent | Critical/High block |
 | 11 | Docker Image Scan | Snyk Container | AI Image Scan Agent | Critical/High block |
 | 12 | Docker Image Sign | Cosign, Sigstore (keyless OIDC) | AI Sign Agent | Yes |
-| 13 | Docker Image Push | AWS ECR (immutable tags, registry policy) | — | Yes |
+| 13 | Docker Image Push | Google Artifact Registry (immutable tags, registry policy) | — | Yes |
 | 14 | Helm Lint & Validation | helm, kubeconform | AI Helm Agent | Critical/High block |
 | 15 | Security Findings Aggregation | GHAS + SonarCloud + Snyk OSS + Snyk Container + Checkov + Kyverno → security-summary.json | AI Vulnerability Analyzer + AI Exploitability Engine | Critical/High block |
 
@@ -86,9 +95,9 @@ Two-phase design. Build DevOps layer first, then layer in DevSecOps security gat
 | 16a | Image Signature Verification | Cosign Verify | AI Sign Agent | **Always blocks** |
 | 17 | Kyverno (Admission) | Kyverno admission controller | AI Kyverno Analyzer | Critical/High block |
 | 18 | KubeArmor (Runtime) | KubeArmor | AI Runtime Incident Analyzer | Critical/High block |
-| 19 | Deploy to EKS | AWS EKS, Kubernetes | AI K8s Security Agent | Critical/High block |
+| 19 | Deploy to GKE | Google GKE, Kubernetes | AI K8s Security Agent | Critical/High block |
 | 20 | DAST | OWASP ZAP | AI OWASP Expert Agent | Critical/High block |
-| 21 | Monitoring (Continuous) | Prometheus, Grafana, CloudWatch, Falco | AI Observability Agent | Alerts only |
+| 21 | Monitoring (Continuous) | Prometheus, Grafana, Google Cloud Monitoring, Falco | AI Observability Agent | Alerts only |
 
 ---
 
@@ -99,7 +108,7 @@ Two-phase design. Build DevOps layer first, then layer in DevSecOps security gat
 GitHub Actions
       |
       v
-Build & Push → AWS ECR
+Build & Push → Google Artifact Registry
       |
       v
 Update Helm Values in GitOps Repo
@@ -114,7 +123,7 @@ ArgoCD Detects Drift → Sync
 Image Signature Verification (Cosign Verify) ← Stage 16a
       |
       v
-AWS EKS (Workloads Running)
+Google GKE (Workloads Running)
 ```
 
 ### PR Review Flow
@@ -177,7 +186,7 @@ Docker Image Built
 Cosign Sign (Stage 12) → Signature stored in Sigstore
         |
         v
-Image pushed to ECR
+Image pushed to Artifact Registry
         |
         v
 Before ArgoCD Deploy → Cosign Verify (Stage 16a)
@@ -272,7 +281,7 @@ This is the differentiator — no individual tool sees the full picture.
 | AI Remediation Agent | Post-15 | Auto-creates fix PRs from critical/high findings |
 | AI Kyverno Analyzer | Stage 17 | Policy violation explanation, CIS/PSS mapping, fix suggestions |
 | AI Runtime Incident Analyzer | Stage 18 + 21 | KubeArmor + Falco → executive summary, MITRE mapping, root cause |
-| AI K8s Security Agent | Stage 19 | Cluster posture, continuous monitoring, EKS compliance |
+| AI K8s Security Agent | Stage 19 | Cluster posture, continuous monitoring, GKE compliance |
 | AI OWASP Expert Agent | Stage 20 | Exploit analysis, remediation guidance (OWASP ZAP) |
 | AI Observability Agent | Stage 21 | Security alerts, anomaly detection, threat intelligence |
 
@@ -280,7 +289,7 @@ This is the differentiator — no individual tool sees the full picture.
 
 ## Slack Notification Triggers
 - Critical / High vulnerability discovered (any stage)
-- Secrets detected (Gitleaks / GHAS Secret Scanning)
+- Secrets detected (GitGuardian)
 - Failed Kyverno policy
 - Runtime attack detected (KubeArmor / Falco)
 - Image signature verification failed
@@ -292,10 +301,10 @@ This is the differentiator — no individual tool sees the full picture.
 
 ---
 
-## Runtime Security in AWS EKS
+## Runtime Security in Google GKE
 ```
-Amazon ECR → Amazon EKS → Kyverno (Admission Controller) → KubeArmor (Runtime Security)
-→ Application Workloads → Prometheus / Grafana / CloudWatch / Falco (Observability)
+Artifact Registry → GKE → Kyverno (Admission Controller) → KubeArmor (Runtime Security)
+→ Application Workloads → Prometheus / Grafana / Cloud Monitoring / Falco (Observability)
 ```
 
 ---
@@ -305,8 +314,8 @@ Amazon ECR → Amazon EKS → Kyverno (Admission Controller) → KubeArmor (Runt
 | Layer | Tools |
 |-------|-------|
 | CI/CD | GitHub Actions |
-| Pre-commit | Husky, detect-secrets |
-| Secrets scanning | Gitleaks, detect-secrets, GHAS Secret Scanning |
+| Pre-commit | Husky, lint-staged, ggshield |
+| Secrets scanning | GitGuardian (ggshield) |
 | PR review | AI PR Reviewer, GHAS (CodeQL, Secret Scanning, Dependabot) |
 | Linting | Flake8, ESLint, Checkstyle, PMD |
 | SAST | Bandit, SonarCloud |
@@ -319,14 +328,14 @@ Amazon ECR → Amazon EKS → Kyverno (Admission Controller) → KubeArmor (Runt
 | Image scanning | Snyk Container |
 | Image signing | Cosign, Sigstore (keyless OIDC) |
 | Image verification | Cosign Verify |
-| Registry | AWS ECR (immutable tags) |
+| Registry | Google Artifact Registry (immutable tags) |
 | Helm | helm, kubeconform |
-| GitOps | ArgoCD |
-| K8s | AWS EKS |
+| GitOps | ArgoCD *(planned — not yet implemented)* |
+| K8s | Google GKE |
 | Admission control | Kyverno |
 | Runtime security | KubeArmor |
 | DAST | OWASP ZAP |
-| Observability | Prometheus, Grafana, CloudWatch, Falco |
+| Observability | Prometheus, Grafana, Google Cloud Monitoring, Falco |
 | Notifications | Slack |
 | Ticketing | Jira |
 | AI framework | Claude (Anthropic API) |
@@ -334,9 +343,11 @@ Amazon ECR → Amazon EKS → Kyverno (Admission Controller) → KubeArmor (Runt
 ---
 
 ## Cloud
-- **Primary**: AWS (EKS, ECR, CloudWatch)
-- **GitOps**: ArgoCD on EKS
-- **Region**: to be confirmed
+- **Primary**: Google Cloud — GKE, Artifact Registry, Cloud Monitoring
+- **Region/zone**: us-central1 / us-central1-a
+- **Auth**: Workload Identity Federation (no long-lived service-account keys)
+- **GitOps**: ArgoCD — **not yet implemented**; deploys currently run
+  `helm upgrade` directly from `deploy-backend.yaml` / `deploy-frontend.yaml`.
 
 ---
 
@@ -411,6 +422,17 @@ cosign verify --key cosign.pub <ecr-image>
 ```
 
 ---
+
+## Implementation Status
+
+Not every stage below is built. As of 2026-07-25:
+
+| Implemented | Planned / not built |
+|---|---|
+| Husky pre-commit, GitGuardian, SonarCloud, CodeQL, Snyk SCA + Container, Checkov, kube-linter, kubeconform, Syft SBOM, Cosign sign + verify, Kyverno, KubeArmor, OWASP ZAP, the AI Release Intelligence engine, and the 507-test suite | ArgoCD/GitOps (deploys run `helm upgrade` directly), Jira ticketing, Slack notifications, the AI Remediation Agent, and Falco |
+
+Stage tables below describe the target design; treat anything in the
+"planned" column as aspirational rather than present.
 
 ## Current Phase
 Phase 1a — Core DevOps pipeline setup. Focus: GitHub Actions workflow skeleton, Husky pre-commit hooks, Gitleaks + detect-secrets setup, GHAS (CodeQL + Secret Scanning + Dependabot), Flake8 + ESLint + Checkstyle, PyTest + Jest baseline, Snyk Open Source SCA.
