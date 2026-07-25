@@ -45,4 +45,16 @@ spec:
       volumes:
         - name: init-sql
           configMap:
-            name: db-init-sql
+            # Created by the postgresql chart (helm/postgresql/templates/
+            # configmap-init-sql.yaml) as `db-schema-sql`, with schema.sql
+            # under the `init.sql` key. This previously read `db-init-sql`,
+            # a name nothing creates, so the volume never mounted and the
+            # post-install hook hung until Helm timed out and marked the
+            # whole cloudcart release failed — even though all three app
+            # pods were running fine.
+            #
+            # NOTE: this is a cross-release dependency — the ConfigMap lives
+            # in the `postgres` release, not this one. Installing cloudcart
+            # into a namespace where the postgresql chart has not been
+            # installed first will fail the same way.
+            name: db-schema-sql
