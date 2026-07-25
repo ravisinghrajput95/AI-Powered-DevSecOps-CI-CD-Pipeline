@@ -218,6 +218,14 @@ jobs:
   snyk-sca-backend:
     name: Snyk SCA (Backend)
     runs-on: ubuntu-latest
+    # Exposes whether `snyk test` actually completed. The step already
+    # captured exit_code but only logged it — the recorded status still came
+    # from needs.<job>.result, which is "success" whenever the step exits 0,
+    # and the case block below always exits 0. So an auth failure produced an
+    # empty findings file and a status of "success": the same silent-zero
+    # that hid an expired SNYK_TOKEN until 2026-07-25.
+    outputs:
+      completed: ${{ steps.snyk_sca.outputs.completed }}
 
     steps:
       - name: Checkout code
@@ -242,6 +250,7 @@ jobs:
         uses: snyk/actions/setup@master
 
       - name: Scan dependencies with Snyk
+        id: snyk_sca
         working-directory: backend
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -263,9 +272,10 @@ jobs:
           exit_code=$?
           set -e
           case $exit_code in
-            0) echo "Snyk SCA: no vulnerabilities found." ;;
-            1) echo "Snyk SCA: vulnerabilities found (report-only, not blocking)." ;;
-            *) echo "::warning::Snyk SCA did not complete cleanly (exit code $exit_code) — check the log above. The report may be missing or incomplete." ;;
+            0) echo "Snyk SCA: scan completed, no vulnerabilities found."; echo "completed=true" >> "$GITHUB_OUTPUT" ;;
+            1) echo "Snyk SCA: scan completed, vulnerabilities found (report-only, not blocking)."; echo "completed=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Snyk SCA did not complete (exit code $exit_code) — the report is missing or invalid. Most likely an expired or invalid SNYK_TOKEN. Downstream this scan is recorded as FAILED, not clean."
+               echo "completed=false" >> "$GITHUB_OUTPUT" ;;
           esac
           exit 0
 
@@ -528,7 +538,14 @@ jobs:
           fi
           SONARCLOUD_STATUS=$(normalize_result "${{ needs.sonarcloud-backend.result }}")
           CODEQL_STATUS=$(normalize_result "${{ needs.codeql-analyze.result }}")
-          SNYK_SCA_STATUS=$(normalize_result "${{ needs.snyk-sca-backend.result }}")
+          # From the step's captured exit code, not the job result: the case
+          # block always exits 0, so the job reads "success" even when the
+          # scan never ran. See the GitGuardian block above.
+          if [ "${{ needs.snyk-sca-backend.outputs.completed }}" = "true" ]; then
+            SNYK_SCA_STATUS="success"
+          else
+            SNYK_SCA_STATUS="failed"
+          fi
 
           cat > scan_status_backend.json << EOF
           {
