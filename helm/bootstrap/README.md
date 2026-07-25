@@ -87,13 +87,47 @@ consistent with KubeArmor resolving containers for *logging* but failing to
 key its per-container policy maps, which is where a containerd 2.x
 interface change would surface.
 
-Suspected environment incompatibility: **containerd 2.1.7** (a recent
-major version) with `kubearmor:stable` / operator v1.7.4 on GKE 1.35 COS.
-Unconfirmed — it needs an upstream issue, ideally with a reproduction on a
-containerd 1.x node pool to isolate the variable. Until then the pipeline
-records `NO_SIGNAL` for kubearmor (see
+### Additional evidence (second investigation)
+
+**Container detection stops after startup.** The DaemonSet logs
+`Detected a container (added/<id>/pidns=.../mntns=...)` only during its
+initial enumeration — the last such line was 05:59:30, while `Detected a
+Pod` entries continued for pods created hours later. Pod detection uses the
+Kubernetes API; container detection uses containerd. So the K8s watch works
+and the containerd event stream does not, which is precisely where a
+containerd 2.x interface change would surface.
+
+**Restarting the DaemonSet re-enumerates but does not reliably fix
+matching.** After a rollout restart (so every workload container predates
+KubeArmor), the target container appears 11 times in the logs — it is
+tracked — and exactly one `MatchedPolicy` alert was observed for
+`ksp-backend-block-shell-exec`. It did not reproduce across three further
+attempts, including one after waiting out the 30s alert-throttle window.
+
+**Alert throttling is not the explanation.** Config is
+`alertThrottling:true, maxAlertPerSec:10, throttleSec:30`; tests were
+repeated with the window cleared and still produced zero alerts against
+775 ContainerLog events in the same capture.
+
+**Block mode does not enforce either.** A diagnostic `action: Block` policy
+on `/bin/ls`, selecting the same pod by the same label, never blocked
+execution across every configuration tried.
+
+The single observed alert is informative: it proves the relay, `karmor`,
+and the alert schema all work end to end. That makes this a
+matching/enforcement problem rather than a transport one.
+
+**Status: unresolved, and not fixable from configuration.** Everything
+KubeArmor self-reports is healthy — `Active LSM: BPFLSM`,
+`Container Security: true`, enforcer initialised, policies registered, pod
+annotated, labels matched, `matchPaths` covering the resolved binary. Next
+step is an upstream issue with a reproduction on a containerd 1.x node pool
+to isolate the variable.
+
+Until then the pipeline records `NO_SIGNAL` for kubearmor (see
 `scripts/release_context_schema.py`), so the runtime domain reports as
-UNMEASURED rather than clean.
+UNMEASURED rather than clean — which is the correct behaviour while this
+is open.
 
 ## Ordering
 
