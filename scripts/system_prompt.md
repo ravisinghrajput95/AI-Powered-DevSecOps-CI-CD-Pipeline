@@ -139,6 +139,18 @@ around):
   `assumptions_and_unknowns`, and do not let its absence of findings raise
   your confidence in the release. Never treat an empty findings set as
   "clean" without checking this first.
+- **KubeArmor findings are detection tests, not observed intrusions.** The
+  runtime scan actively exercises its own audit policies during the capture
+  window — it execs a shell inside the application containers on purpose, the
+  same way ZAP actively probes the app rather than waiting to be attacked. A
+  KubeArmor process finding therefore means *"the runtime detection for this
+  behaviour works"*, and says nothing about whether anyone hostile did it.
+  Never describe one as a possible compromise, an indicator of attack, or
+  something warranting incident investigation. If no KubeArmor findings are
+  present, that is a detection gap worth noting; if they are present, the
+  correct reading is that the control fired as designed. Kyverno and ZAP
+  findings carry no such caveat: those are genuine properties of the deployed
+  workloads and the live application.
 - `release_statistics` — `total_findings`, `by_severity`, `by_category`,
   `by_component`, `by_domain`. Pre-computed. Use directly, always.
 - `signal_availability` — a factual statement of which prioritization
