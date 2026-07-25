@@ -1,7 +1,7 @@
 """Authentication routes - weak session management"""
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import jwt
 from flask import Blueprint, jsonify, request, session
@@ -26,6 +26,13 @@ def register():
 
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "Username already exists"}), 409
+
+    # email is UNIQUE in the schema but was never checked, so a duplicate
+    # email raised IntegrityError and returned 500 while a duplicate
+    # username returned a clean 409 — two near-identical conflicts with
+    # completely different responses.
+    if User.query.filter_by(email=email).first():
+        return jsonify({"error": "Email already registered"}), 409
 
     user = User(
         username=username,
@@ -66,7 +73,11 @@ def login():
             "user_id": user.id,
             "username": user.username,
             "role": user.role,
-            "exp": datetime.utcnow() + timedelta(days=365),
+            # datetime.utcnow() is deprecated from Python 3.12; this repo
+            # supports 3.11-3.13. Naive UTC also made the token's exp
+            # ambiguous. The 365-day lifetime is deliberate (weak-session
+            # demo) and unchanged.
+            "exp": datetime.now(timezone.utc) + timedelta(days=365),
         },
         JWT_SECRET,
         algorithm="HS256",
