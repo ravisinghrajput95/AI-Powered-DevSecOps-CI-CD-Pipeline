@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Resolve release SHA
         id: resolve_sha
@@ -212,13 +212,13 @@ jobs:
 
       # ── Live signature verification (not relayed from an earlier job) ────
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
         with:
           version: ">= 363.0.0"
 
@@ -226,7 +226,7 @@ jobs:
         run: gcloud auth configure-docker $GAR_REGION-docker.pkg.dev --quiet
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Verify image signatures
         id: verify
@@ -383,7 +383,7 @@ jobs:
           python3 scripts/build_release_context.py "${ARGS[@]}"
 
       - name: Upload ReleaseContext
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-context
           path: release_context.json
@@ -445,7 +445,7 @@ jobs:
           fi
 
       - name: Upload final ReleaseContext
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: final-release-context
           path: final_release_context.json
@@ -468,7 +468,7 @@ jobs:
 
       - name: Upload ExecutiveReport
         if: ${{ inputs.run_ai_analysis }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: executive-report
           path: executive_report.json
@@ -491,7 +491,7 @@ jobs:
 
       - name: Upload AI Security Report
         if: ${{ inputs.run_ai_analysis }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-security-report
           path: |

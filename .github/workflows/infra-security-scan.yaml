@@ -19,10 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: "3.14.0"
 
@@ -73,7 +73,7 @@ jobs:
 
       - name: Upload raw kube-linter report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: kubelinter-report
           path: kubelinter-report.json
@@ -85,7 +85,7 @@ jobs:
 
       - name: Upload normalized findings
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: normalized-kubelinter
           path: normalized-kubelinter.json
@@ -168,7 +168,7 @@ jobs:
 
       - name: Upload kubeconform status
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: kubeconform-status
           path: kubeconform_status.json
@@ -222,7 +222,7 @@ jobs:
 
       - name: Upload raw checkov report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: checkov-report
           path: checkov-report.json
@@ -234,14 +234,14 @@ jobs:
 
       - name: Upload normalized checkov findings
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: normalized-checkov
           path: normalized-checkov.json
           if-no-files-found: warn
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: "1.9.8"
           terraform_wrapper: false
@@ -295,7 +295,7 @@ jobs:
 
       - name: Upload terraform validation status
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: terraform-validation-status
           path: terraform_validation_status.json
@@ -337,7 +337,7 @@ jobs:
 
       - name: Upload scan status
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: scan-status-infra
           path: scan_status_infra.json

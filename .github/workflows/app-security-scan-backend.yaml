@@ -40,13 +40,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
       - name: GitGuardian scan (GitHub annotation)
         id: ggshield
-        uses: GitGuardian/ggshield-action@v1
+        uses: GitGuardian/ggshield-action@da20be06cafe5e8633dc24744efe1efe8d30f06b # v1
         continue-on-error: true
         env:
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
@@ -57,7 +57,7 @@ jobs:
           args: --all-secrets
 
       - name: Install python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
 
@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload raw findings artifact
         if: always() && steps.check.outputs.has_findings == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: gitguardian-findings-backend-${{ github.run_id }}
           path: gitguardian-findings.json
@@ -136,7 +136,7 @@ jobs:
 
       - name: Upload normalized findings (for merge job)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: normalized-backend-gitguardian
           path: normalized-gitguardian.json
@@ -159,12 +159,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -175,7 +175,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: SonarSource/sonarqube-scan-action@689fb39b34b9aa95ebc5f8f119343ddd51542402 # v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_BACKEND }}
@@ -201,7 +201,7 @@ jobs:
 
       - name: Upload normalized findings (for merge job)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: normalized-backend-sonarcloud
           path: normalized-sonarcloud.json
@@ -229,10 +229,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -247,7 +247,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Install Snyk CLI
-        uses: snyk/actions/setup@master
+        uses: snyk/actions/setup@8e119fbb6c251787721d34ba683ed48eba792766 # master
 
       - name: Scan dependencies with Snyk
         id: snyk_sca
@@ -303,7 +303,7 @@ jobs:
       # normalize_snyk.py) are what actually disambiguates the two.
       - name: Upload raw Snyk SCA report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: snyk-sca-backend-report
           path: snyk-sca-backend.json
@@ -315,7 +315,7 @@ jobs:
 
       - name: Upload normalized findings (for merge job)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: normalized-backend-snyk-sca
           path: normalized-snyk-sca.json
@@ -339,10 +339,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -358,7 +358,7 @@ jobs:
 
       - name: Perform CodeQL Analysis
         id: analyze
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
         with:
           category: "/language:${{matrix.language}}"
           upload: true
@@ -366,7 +366,7 @@ jobs:
 
       - name: Upload SARIF for reporting
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sarif-backend-${{ matrix.language }}
           path: sarif-results/${{ matrix.language }}.sarif
@@ -388,10 +388,10 @@ jobs:
 
     steps:
       - name: Checkout code (for scripts/)
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Download SARIF artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: sarif-backend-*
           path: sarif-downloads
@@ -438,7 +438,7 @@ jobs:
           python3 scripts/normalize_codeql.py normalized-codeql.json $SARIF_FILES
 
       - name: Upload CSV report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: codeql-backend-report-${{ github.run_id }}
           path: codeql-backend-report.csv
@@ -447,7 +447,7 @@ jobs:
 
       - name: Upload normalized findings (for merge job)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: normalized-backend-codeql
           path: normalized-codeql.json
@@ -473,10 +473,10 @@ jobs:
 
     steps:
       - name: Checkout code (for scripts/)
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Download all normalized findings
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: normalized-backend-*
           path: normalized-downloads
@@ -493,7 +493,7 @@ jobs:
             normalized-downloads/normalized-snyk-sca.json
 
       - name: Upload combined findings artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: security-findings-backend-${{ github.run_id }}
           path: security-findings-backend.json
@@ -559,7 +559,7 @@ jobs:
 
       - name: Upload scan status
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: scan-status-backend
           path: scan_status_backend.json
