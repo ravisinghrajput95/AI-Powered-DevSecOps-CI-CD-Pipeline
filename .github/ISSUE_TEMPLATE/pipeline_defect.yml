@@ -1,0 +1,79 @@
+name: Pipeline defect
+description: The pipeline reported something that was not true, or a stage behaved incorrectly
+labels: ["pipeline"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For defects in the pipeline — `scripts/`, `.github/workflows/`, `helm/`,
+        `policies/`, `tests/`.
+
+        **Not for CloudCart's vulnerabilities.** Those are
+        [planted on purpose](../../#intentional-vulnerabilities) and load-bearing.
+
+        If the defect means a scan silently produced no data while reporting
+        success, please use a [private advisory](../../security/advisories/new)
+        instead — see `SECURITY.md`.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Workflow (.github/workflows/)
+        - Release context builder (scripts/build_release_context.py)
+        - Report renderer / schemas (scripts/)
+        - AI analysis (release intelligence engine)
+        - Helm chart (helm/)
+        - Policy (Kyverno / KubeArmor)
+        - Tests (tests/, backend/tests/, frontend/src/__test__/)
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: reported
+    attributes:
+      label: What the pipeline reported
+      description: The status, count, or verdict you saw.
+      placeholder: |
+        scan_status.backend.snyk_sca = SUCCESS, 0 findings
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What was actually true
+      description: >-
+        How you established it — a raw artifact, a local run of the same tool,
+        a count that did not match.
+      placeholder: |
+        The raw snyk-sca-backend.json artifact contains 41 findings. The token
+        had expired and the job's continue-on-error masked the failure.
+    validations:
+      required: true
+
+  - type: input
+    id: run
+    attributes:
+      label: Workflow run URL or artifact name
+      description: If it happened in CI. Leave blank if reproduced locally.
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: >-
+        Commands, workflow inputs, or the fixture that triggers it. For
+        `scripts/` defects a fixture under `tests/fixtures/` is ideal.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: This is not one of CloudCart's intentional vulnerabilities
+          required: true
+        - label: I ran `pytest tests/` and included any relevant failure output
+          required: false

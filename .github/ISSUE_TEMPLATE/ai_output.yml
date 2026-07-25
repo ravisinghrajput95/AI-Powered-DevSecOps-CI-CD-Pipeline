@@ -1,0 +1,61 @@
+name: AI report quality
+description: The AI's reasoning, verdict, or evidence citation was wrong
+labels: ["ai-quality"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The engine's whole premise is that the AI reasons **only** over facts the
+        scanners produced, cites them by `finding_id`, and never invents a
+        severity or a count. `verify_finding_id_references()` rejects citations
+        that do not resolve, and the response is schema-validated with a
+        corrective retry.
+
+        A defect here is more serious than a formatting complaint — it means the
+        evidence contract leaked. Please be specific about which layer failed.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong
+      options:
+        - Cited a finding_id that does not exist in the release context
+        - Stated a count, severity or CVE that contradicts the release context
+        - Verdict does not follow from the findings presented
+        - Missed a correlation that the data clearly supports
+        - Presented an absent signal as a clean result
+        - Schema-valid but unhelpful / generic reasoning
+    validations:
+      required: true
+
+  - type: input
+    id: report_id
+    attributes:
+      label: Report ID
+      description: The 16-char id at the top of the report.
+      placeholder: fc3ff0dc9c44a2bc
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: claude-sonnet-4-6
+
+  - type: textarea
+    id: quote
+    attributes:
+      label: What the report said
+      description: Quote it exactly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: What the release context actually contained
+      description: >-
+        The corresponding entry from `final_release_context.json` — the finding,
+        its severity, or the `scan_status` block. This is what makes the report
+        actionable rather than a matter of taste.
+    validations:
+      required: true

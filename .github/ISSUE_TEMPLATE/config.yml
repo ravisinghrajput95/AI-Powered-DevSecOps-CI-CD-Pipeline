@@ -1,0 +1,13 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 🔒 Security issue in the pipeline itself
+    url: https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline/security/advisories/new
+    about: >-
+      Report privately if a scanner can be made to report success over missing
+      data, or if a real credential has leaked. See SECURITY.md for scope.
+  - name: ⚠️ A vulnerability in the CloudCart app
+    url: https://github.com/ravisinghrajput95/AI-Powered-DevSecOps-CI-CD-Pipeline#intentional-vulnerabilities
+    about: >-
+      Please read first — CloudCart's SQLi, XSS, command injection, hardcoded
+      secrets and outdated base images are planted on purpose. They are the
+      pipeline's test data, not bugs.

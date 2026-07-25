@@ -1,0 +1,39 @@
+name: Enhancement
+description: Suggest a new scanner, stage, agent, or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should change
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: What it would let the pipeline conclude that it cannot today
+      description: >-
+        The bar for a new scanner is a signal no existing tool provides. Adding
+        a seventh source of "this dependency is outdated" costs runtime and
+        report noise without improving a release decision; adding reachability
+        or runtime evidence changes what the correlation engine can conclude.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Which layer
+      description: >-
+        The separation is deliberate — tools produce facts, Python computes
+        deterministically, the AI reasons only over what it is given.
+      options:
+        - New scanner / evidence source
+        - Deterministic computation (scripts/)
+        - AI reasoning / prompt
+        - Reporting and rendering
+        - Infrastructure (Helm, policies, cluster)
+        - Documentation
+    validations:
+      required: true
