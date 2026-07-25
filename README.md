@@ -134,7 +134,7 @@ Cloudcart/
 |   `-- kubearmor/            # KubeArmor runtime policies
 |-- .github/workflows/        # CI/CD + AI Release Intelligence pipelines
 |-- scripts/                  # Normalizers, ReleaseContext builders, AI agent, renderers
-|-- tests/                    # 507 automated tests + golden regression dataset
+|-- tests/                    # 524 automated tests + golden regression dataset
 |-- docker-compose.yml
 |-- README.md
 ```
@@ -331,6 +331,10 @@ Scans are designed to produce findings even when secrets are not set; several wo
 
 Every scanner above produces its own raw, tool-specific output. This platform turns that into one structured, evidence-grounded release decision — not a dashboard aggregating numbers, an actual reasoned recommendation with citations back to real findings.
 
+[![AI release readiness report — verdict "Do not approve", health CRITICAL, with a cross-domain correlation citing individual finding ids](docs/images/release-report.png)](reports/sample/release_report.md)
+
+*A real report from this pipeline — [read the full version](reports/sample/release_report.md) ([styled HTML](reports/sample/release_report.html)). The chips under each correlation are `finding_id` references that resolve to actual scanner findings in `final_release_context.json`; a citation that does not resolve fails the run. Note the correlation itself: CodeQL/SonarCloud injection findings joined to Checkov's open firewall rules and to Kyverno's live admission failures. No single scanner produces that sentence.*
+
 **Full design, schema reference, domain model, and workflow orchestration diagram: [ARCHITECTURE.md](ARCHITECTURE.md)**
 
 Three strictly separated layers — security tools own facts, Python owns deterministic computation, AI owns reasoning only, humans own the actual deployment decision:
@@ -390,7 +394,7 @@ flowchart TD
 
 ### Test suite
 
-507 automated tests (`tests/`) — schema validation, evidence-citation integrity, cross-domain correlation integrity, renderer correctness, and a golden regression dataset covering 8 representative scenarios. Full detail in [ARCHITECTURE.md](ARCHITECTURE.md#test-suite).
+524 automated tests (`tests/`) — schema validation, evidence-citation integrity, cross-domain correlation integrity, renderer correctness, and a golden regression dataset covering 8 representative scenarios. Full detail in [ARCHITECTURE.md](ARCHITECTURE.md#test-suite).
 
 ```bash
 pip install -r tests/requirements.txt
