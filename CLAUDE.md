@@ -22,7 +22,7 @@ This project builds an AI-powered DevSecOps CI/CD pipeline using GitHub Actions,
   /terraform           # Kubernetes cluster infrastructure (intentionally misconfigured for Checkov)
   /policies            # kyverno/ (19 ClusterPolicies), kubearmor/ (8 policies)
   /scripts             # normalizers, context builders, AI engine, renderers
-  /tests               # 546-test suite for scripts/ (golden + real-world fixtures)
+  /tests               # 559-test suite for scripts/ (golden + real-world fixtures)
   /monitoring          # Prometheus/Grafana config
   /.github/workflows   # 14 CI/CD + security workflows
   ```
@@ -450,7 +450,7 @@ Not every stage below is built. As of 2026-07-25:
 
 | Implemented | Planned / not built |
 |---|---|
-| Husky pre-commit, GitGuardian, SonarCloud, CodeQL, Snyk SCA + Container, Checkov, kube-linter, kubeconform, Syft SBOM, Cosign sign + verify, Kyverno, KubeArmor, OWASP ZAP, the AI Release Intelligence engine, and the 546-test suite | ArgoCD/GitOps (deploys run `helm upgrade` directly), Jira ticketing, Slack notifications, the AI Remediation Agent, and Falco |
+| Husky pre-commit, GitGuardian, SonarCloud, CodeQL, Snyk SCA + Container, Checkov, kube-linter, kubeconform, Syft SBOM, Cosign sign + verify, Kyverno, KubeArmor, OWASP ZAP, the AI Release Intelligence engine, and the 559-test suite | ArgoCD/GitOps (deploys run `helm upgrade` directly), Jira ticketing, Slack notifications, the AI Remediation Agent, and Falco |
 
 Stage tables below describe the target design; treat anything in the
 "planned" column as aspirational rather than present.

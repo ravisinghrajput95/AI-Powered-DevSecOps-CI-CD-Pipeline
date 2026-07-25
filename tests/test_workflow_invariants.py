@@ -353,3 +353,43 @@ def test_the_exercise_script_is_syntactically_valid():
                           "exercise-kubearmor-policies.sh")
     proc = subprocess.run([bash, "-n", script], capture_output=True, text=True)
     assert proc.returncode == 0, f"{EXERCISE_SCRIPT} has a syntax error:\n{proc.stderr}"
+
+
+# ── The stability ledger must keep being fed ──────────────────────────────
+
+def test_release_readiness_records_every_ai_run_in_the_ledger():
+    """A stability history only exists if every real run contributes to it.
+
+    Drop this step and nothing breaks: the report still renders, the artifact
+    still uploads, and the ledger simply stops growing — so the one question
+    people ask about an LLM in a release gate quietly becomes unanswerable
+    again. The failure is invisible precisely because the ledger's value is
+    cumulative.
+    """
+    doc = load_workflow("release-readiness.yaml")
+    steps = doc["jobs"]["assess"]["steps"]
+    names = [s.get("name", "") for s in steps]
+
+    ledger_steps = [s for s in steps if "run_ledger.py" in str(s.get("run", ""))]
+    assert ledger_steps, (
+        "release-readiness.yaml no longer records runs via scripts/run_ledger.py — "
+        "the stability history will stop growing without any test failing."
+    )
+    step = ledger_steps[0]
+
+    # The model is not recorded in ExecutiveReport v1.0, so it must be passed
+    # explicitly or rows become uncomparable across models.
+    assert "--model" in str(step.get("run", "")), (
+        "the ledger step must pass --model; ExecutiveReport does not record it and "
+        "rows from different models would otherwise be compared as equivalent."
+    )
+
+    # It reads the rendered run's artifacts, so it has to come after they exist.
+    idx = steps.index(step)
+    for produced_by in ("Run AI Security Analysis", "Build ReleaseContext"):
+        matching = [i for i, n in enumerate(names) if produced_by.lower() in n.lower()]
+        if matching:
+            assert idx > matching[0], (
+                f"the ledger step must run after '{names[matching[0]]}', which produces "
+                "the files it reads."
+            )

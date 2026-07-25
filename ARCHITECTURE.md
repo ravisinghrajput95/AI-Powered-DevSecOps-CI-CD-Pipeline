@@ -142,7 +142,7 @@ AI-authored fields: `executive_summary`, `cross_domain_correlations[]`, `top_ris
 
 ## Test suite
 
-546 automated tests in `tests/`:
+559 automated tests in `tests/`:
 
 - Schema validation for both contracts, against golden fixtures and real frozen CI artifacts.
 - Evidence-citation integrity — every cited `finding_id` must exist in real findings. This is the single highest-value check: it's the exact test that would have caught a real citation bug from an early run (a transposed character in a `finding_id`, cited twice with two slightly different values).
@@ -154,7 +154,7 @@ AI-authored fields: `executive_summary`, `cross_domain_correlations[]`, `top_ris
 pip install -r tests/requirements.txt
 python3 -m pytest
 ```
-- Workflow structural invariants (`tests/test_workflow_invariants.py`) — 23 guards over the security workflows themselves: a scan status must derive from a step's own exit code rather than `needs.<job>.result` (which `continue-on-error` masks), no scanner-side severity filtering, actions pinned to commit SHAs, deploy gated on push-from-`main`, and the KubeArmor capture window must be actively exercised while its stream is open (ordering, settle time and window length are each asserted, because a mis-ordered exercise produces an empty capture with no error). Every one of these encodes a defect that shipped green over incomplete data.
+- Workflow structural invariants (`tests/test_workflow_invariants.py`) — 24 guards over the security workflows themselves: a scan status must derive from a step's own exit code rather than `needs.<job>.result` (which `continue-on-error` masks), no scanner-side severity filtering, actions pinned to commit SHAs, deploy gated on push-from-`main`, and the KubeArmor capture window must be actively exercised while its stream is open (ordering, settle time and window length are each asserted, because a mis-ordered exercise produces an empty capture with no error). Every one of these encodes a defect that shipped green over incomplete data.
 - API request shape (`tests/test_api_request_shape.py`) — `temperature` pinned, `tool_choice` forced, API key in the header not the body. `urlopen` is stubbed, so no network call and no key.
 - Offline demo integrity (`tests/test_demo_report.py`) — the nine fixture pairs `scripts/demo_report.py` renders are referenced by filename and read by nothing else in the suite, so a renamed fixture would break the one entry point a stranger actually runs while every other test stayed green. The end-to-end case strips `ANTHROPIC_API_KEY` from the child environment, making "needs no API key" a checked claim.
 - Documentation accuracy (`tests/test_docs_accuracy.py`) — the test count, Kyverno/KubeArmor policy counts and workflow count claimed in `README.md`, `ARCHITECTURE.md` and `CLAUDE.md` are compared against reality, and no committed report may contain a live host address. A number a reader can check and find wrong discredits the numbers they cannot check.
