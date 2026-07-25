@@ -56,7 +56,7 @@ Two-phase design. Build DevOps layer first, then layer in DevSecOps security gat
 
 | # | Stage | Tools | AI Agent | Blocking? |
 |---|-------|-------|----------|-----------|
-| 1 | Pre-Commit | Husky, detect-secrets, IAC scan (optional) | — | Yes |
+| 1 | Pre-Commit | Husky + lint-staged, ggshield secret scan | — | Lint blocks; secret scan warns |
 | 2 | Raise PR | GitHub Actions | — | — |
 | 2a | PR Review | GHAS (CodeQL, Secret Scanning, Dependabot), AI PR Reviewer, Human Review | AI PR Reviewer + AI CodeQL Agent | Critical/High block |
 | 3 | PR Merge | GitHub Actions (protected branch) | — | Human approves merge |
@@ -143,7 +143,7 @@ Human Approves Merge
 Developer commits AWS key
         |
         v
-Gitleaks + detect-secrets catch it (Stage 5a)
+GitGuardian (ggshield) catches it (Stage 5a)
         |
         v
 AI Secrets Agent explains risk + exposure impact
@@ -268,7 +268,7 @@ This is the differentiator — no individual tool sees the full picture.
 | AI PR Reviewer | Stage 2a | Code review, security review, best practices, bug detection |
 | AI CodeQL Agent | Stage 2a / 6a | GHAS CodeQL findings, secret scanning alerts, Dependabot advisories |
 | AI Verification Agent | Stage 4 | Checkout, lint, unit/integration test analysis |
-| AI Secrets Agent | Stage 5a | Gitleaks + detect-secrets findings — explains exposure risk, always blocks |
+| AI Secrets Agent | Stage 5a | GitGuardian findings — explains exposure risk. Report-only today: the pre-commit hook warns and proceeds, and the CI job is continue-on-error. |
 | AI SAST Agent | Stage 6 | Explain vulnerabilities, remediation guidance (Bandit/SonarCloud) |
 | AI SCA Agent | Stage 9 | Vulnerability analysis, upgrade recommendations (Snyk OSS) |
 | AI IaC Security Agent | Stage 9a | Checkov findings — Terraform + Kubernetes misconfigurations |
@@ -406,8 +406,7 @@ cd backend && flake8 .
 cd frontend && npm run lint
 
 # Secrets scan
-gitleaks detect --source . --verbose
-detect-secrets scan > .secrets.baseline
+ggshield secret scan repo . --all-secrets
 
 # IaC scan (moved before Docker build)
 checkov -d infra/
@@ -435,7 +434,7 @@ Stage tables below describe the target design; treat anything in the
 "planned" column as aspirational rather than present.
 
 ## Current Phase
-Phase 1a — Core DevOps pipeline setup. Focus: GitHub Actions workflow skeleton, Husky pre-commit hooks, Gitleaks + detect-secrets setup, GHAS (CodeQL + Secret Scanning + Dependabot), Flake8 + ESLint + Checkstyle, PyTest + Jest baseline, Snyk Open Source SCA.
+Phase 1a — Core DevOps pipeline setup. Focus: GitHub Actions workflow skeleton, Husky pre-commit hooks, GitGuardian secret scanning, CodeQL + Dependabot, Flake8 + ESLint + Checkstyle, PyTest + Jest baseline, Snyk Open Source SCA.
 
 ---
 
