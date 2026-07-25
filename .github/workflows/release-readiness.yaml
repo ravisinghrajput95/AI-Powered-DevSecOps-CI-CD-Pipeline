@@ -86,7 +86,7 @@ jobs:
               sha=$(echo "$latest" | jq -r '.headSha // empty')
               exact_match="false"
               if [ -n "$run_id" ]; then
-                echo "::warning::No successful run of $workflow found for commit $SHA — using latest successful run instead (commit $sha)."
+                echo "::warning::No successful run of $workflow found for commit $SHA — using latest successful run instead (commit $sha)." >&2
               fi
             fi
 
