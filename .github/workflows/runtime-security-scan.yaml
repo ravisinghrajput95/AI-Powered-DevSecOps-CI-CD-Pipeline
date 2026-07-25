@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code (for scripts/)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Baseline only: spider + passive analysis, no active attack payloads,
       # no form submissions. Deliberately not action-full-scan — see the
@@ -115,7 +115,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code (for policies/kyverno/ and scripts/)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v3
@@ -217,7 +217,7 @@ jobs:
       CAPTURE_SECONDS: 30
     steps:
       - name: Checkout code (for scripts/)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v3
@@ -297,7 +297,7 @@ jobs:
     if: ${{ always() && inputs.reset_database }}
     steps:
       - name: Checkout code (for schema.sql/seed.sql)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v3
