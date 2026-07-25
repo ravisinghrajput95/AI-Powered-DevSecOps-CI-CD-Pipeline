@@ -29,6 +29,14 @@ jobs:
     name: Scan for Secrets (Report Only)
     runs-on: ubuntu-latest
     continue-on-error: true
+    # Exposes whether ggshield actually completed, so "Record scan status"
+    # can distinguish a real clean scan from a scanner that never ran.
+    # needs.<job>.result is useless here: this job carries
+    # continue-on-error: true, so its result reads "success" no matter what
+    # happened inside it — which is exactly how an expired API key was
+    # recorded as a successful secrets scan.
+    outputs:
+      completed: ${{ steps.report.outputs.completed }}
 
     steps:
       - name: Checkout code
@@ -57,16 +65,40 @@ jobs:
         if: always()
         run: pip install ggshield --break-system-packages
 
+      # Captures ggshield's real exit code instead of discarding it with
+      # `|| true`. This closes a confirmed failure observed 2026-07-25: the
+      # GITGUARDIAN_API_KEY had expired, ggshield exited non-zero with
+      # "Invalid GitGuardian API key", `|| true` swallowed it, the empty
+      # output normalized to [], and scan_status recorded
+      # "gitguardian": "success". Downstream, a broken secrets scanner was
+      # indistinguishable from a clean repo — on a codebase that
+      # deliberately contains AWS keys, a Stripe key, and a GitHub token.
+      #
+      # ggshield exit codes: 0 = scanned, no secrets; 1 = scanned, secrets
+      # found; anything else = the scan did not complete (auth, network,
+      # bad args). Only the first two mean the result is trustworthy.
+      #
+      # Same shape as the Snyk container step in backend-ci.yaml, which
+      # already got this right — propagating the proven pattern rather
+      # than inventing a second one.
       - name: Generate JSON findings report
         if: always()
         id: report
-        continue-on-error: true
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
         run: |
-          ggshield secret scan repo . --all-secrets --json > gitguardian-findings.json || true
-          echo "Report saved to gitguardian-findings.json"
-          cat gitguardian-findings.json
+          set +e
+          ggshield secret scan repo . --all-secrets --json > gitguardian-findings.json
+          exit_code=$?
+          set -e
+          case $exit_code in
+            0) echo "ggshield: scan completed, no secrets found."; echo "completed=true" >> "$GITHUB_OUTPUT" ;;
+            1) echo "ggshield: scan completed, secrets found (report-only)."; echo "completed=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::ggshield did not complete (exit code $exit_code) — the report is missing or invalid. Most likely an expired or invalid GITGUARDIAN_API_KEY. Downstream this scan is recorded as FAILED, not clean."
+               echo "completed=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+          cat gitguardian-findings.json || true
+          exit 0
 
       # ─────────────────────────────────────────────────────────
       # Schema-independent check: a clean scan produces an empty
@@ -483,7 +515,17 @@ jobs:
             esac
           }
 
-          GITGUARDIAN_STATUS=$(normalize_result "${{ needs.gitguardian-scan.result }}")
+          # GitGuardian is the one scanner whose job-level result cannot be
+          # trusted (continue-on-error: true masks everything), so its status
+          # comes from the step's own captured exit code instead. "true" means
+          # ggshield genuinely ran to completion — an empty findings file then
+          # really does mean a clean scan. Anything else is a failed scan and
+          # must not be reported as clean.
+          if [ "${{ needs.gitguardian-scan.outputs.completed }}" = "true" ]; then
+            GITGUARDIAN_STATUS="success"
+          else
+            GITGUARDIAN_STATUS="failed"
+          fi
           SONARCLOUD_STATUS=$(normalize_result "${{ needs.sonarcloud-backend.result }}")
           CODEQL_STATUS=$(normalize_result "${{ needs.codeql-analyze.result }}")
           SNYK_SCA_STATUS=$(normalize_result "${{ needs.snyk-sca-backend.result }}")
