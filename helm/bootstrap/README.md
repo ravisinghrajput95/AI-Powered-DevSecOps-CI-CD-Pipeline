@@ -190,6 +190,17 @@ Until then the pipeline records `NO_SIGNAL` for kubearmor (see
 UNMEASURED rather than clean — which is the correct behaviour while this
 is open.
 
+> **End of the superseded investigation.** Everything above this line is kept
+> for the record and is wrong in its conclusion. No upstream issue was ever
+> warranted: KubeArmor works, the capture window was simply idle, and the
+> pipeline now records `SUCCESS` for kubearmor rather than `NO_SIGNAL`. See
+> [KubeArmor alerting — RESOLVED](#kubearmor-alerting--resolved-2026-07-25)
+> at the top of this file.
+>
+> The `NO_SIGNAL` status itself remains correct and in use — it is still the
+> honest answer whenever a bounded capture genuinely records nothing, and
+> `tests/test_workflow_invariants.py` now asserts it stays reachable.
+
 ## Ordering
 
 1. `helm/bootstrap` — this chart (CRDs, controllers, annotated namespace)
