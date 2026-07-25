@@ -6,12 +6,16 @@ have no way to see what the AI Release Intelligence Engine actually outputs.
 
 | | |
 |---|---|
-| **Report ID** | `fc3ff0dc9c44a2bc` |
+| **Report ID** | `2972549035486c62` |
 | **Generated** | 2026-07-25 |
-| **Release** | `f083f2d` |
-| **Model** | `claude-haiku-4-5` |
-| **Verdict** | `DO_NOT_APPROVE` — health CRITICAL, confidence LOW |
-| **Findings** | 239 grouped (544 occurrences) across 4 domains, 8 tools |
+| **Release** | `0b5819a` |
+| **Model** | `claude-sonnet-4-6` |
+| **Verdict** | `DO_NOT_APPROVE` — health CRITICAL, deployment confidence LOW |
+| **Findings** | 241 across 4 domains, 9 tools |
+| **Correlations** | 7 cross-domain |
+
+Domain split: `application_security` 128, `container_security` 57,
+`infrastructure_security` 32, `runtime_security` 24.
 
 ## Files
 
@@ -20,98 +24,83 @@ have no way to see what the AI Release Intelligence Engine actually outputs.
 | [`sample/release_report.md`](sample/release_report.md) | The rendered report — **start here** |
 | [`sample/release_report.html`](sample/release_report.html) | Same report, styled |
 
-## ⚠️ Placeholders
+## ⚠️ Placeholder
 
-**These files are not byte-identical to the pipeline's output.** Two
-substitutions were made before committing:
+**These files are not byte-identical to the pipeline's output.** The real GCP
+project ID was replaced with `<GCP_PROJECT_ID>` (16 occurrences, HTML only —
+Artifact Registry image paths). That substitution is the **only**
+modification. Findings, severities, correlations, verdict, reasoning and
+finding-id citations are exactly as generated.
 
-1. The real GCP project ID → `<GCP_PROJECT_ID>` (344 places), appearing
-   throughout as Artifact Registry image paths:
+Nothing else is redacted. The normalizers record rule ids and locations rather
+than secret values, so no credential — including the AWS, Stripe and GitHub
+keys deliberately planted in this codebase — appears in the output.
 
-   ```
-   us-central1-docker.pkg.dev/<GCP_PROJECT_ID>/cloudcart-frontend/cloudcart-frontend:<sha>
-   ```
-
-2. The cluster's LoadBalancer IP → `<CLUSTER_IP>` (34 places), appearing as
-   the ZAP scan target:
-
-   ```
-   ["http://<CLUSTER_IP>/", "http://<CLUSTER_IP>/robots.txt", ...]
-   ```
-
-   That address pointed at a live, internet-facing instance of a deliberately
-   vulnerable application. Publishing it in a public repository handed anyone
-   reading this a working target, which flatly contradicts the warning at the
-   top of the main README. It should never have been committed unscrubbed.
-
-Those two substitutions are the **only** modifications. Findings, severities,
-correlations, verdict, reasoning and finding-id citations are all exactly as
-generated. If you regenerate this report yourself, expect your own project id
-and your own cluster address in those places.
-
-Nothing else is redacted. The pipeline's normalizers record rule ids and
-locations rather than secret values, so no credential — including the AWS,
-Stripe and GitHub keys deliberately planted in this codebase — appears in the
-output.
+> An earlier committed report also contained the cluster's live LoadBalancer
+> IP in 34 places, as the ZAP scan target, while that address was serving a
+> deliberately vulnerable app on the public internet. It was scrubbed, and
+> `tests/test_docs_accuracy.py` now fails if any committed report contains a
+> live host address.
 
 ## What it demonstrates
 
-**Cross-tool correlation.** The report links Kyverno's live admission
-failures to Checkov's static IaC findings, and CodeQL's injection findings to
-SonarCloud's independently. No single scanner produces those statements —
-that correlation is the reason this pipeline exists.
+**Cross-tool correlation.** The lead correlation joins Terraform's disabled
+Workload Identity (Checkov) to project-scope Owner IAM and to SSRF findings in
+application code — concluding that a container escape or SSRF from any pod
+reaches the metadata server and yields a project-Owner token. Five citations,
+three domains, three tools. No single scanner produces that sentence.
 
-**Honest gaps.** `scan_status.deployed-app.kubearmor` is `NO_SIGNAL`, and the
-model surfaces it in `assumptions_and_unknowns` rather than treating an empty
-runtime domain as a clean one. `NO_SIGNAL` exists precisely so "the tool found
-nothing" cannot be mistaken for "there is nothing to find".
+**Runtime evidence is real, not static analysis.** Kyverno's privilege-
+escalation violations are live admission results from the deployed cluster,
+and the report says so explicitly rather than presenting them as config
+review.
 
-This report was generated before that gap was understood. At the time it was
-believed to be an upstream KubeArmor defect; it was not. KubeArmor works, and
-the capture window was simply idle — a steady-state web app never execs the
-shells the policies watch for, so a bounded capture recorded nothing. The
-window is now exercised during the scan (see
-[`../helm/bootstrap/README.md`](../helm/bootstrap/README.md)), and a report
-regenerated today would carry real runtime findings here.
-
-The report is kept as generated rather than re-run, because what it
-demonstrates is the point: the pipeline surfaced an absent signal instead of
-quietly rendering an empty runtime domain as a clean one, and that is what
-made the gap findable at all.
-
-The model also flagged, unprompted, that the infrastructure scan was 28 days
-stale relative to the release — from the provenance block, which records
-which commit each upstream scan actually came from.
+**Honest gaps.** `assumptions_and_unknowns` records that reachability,
+exploitability, business impact and internet exposure are **not collected**,
+that supply-chain verification returned UNKNOWN for both images, and —
+unprompted — that the infrastructure scan ran 28 days before this release,
+which the model read off the provenance block.
 
 ## Caveats, stated rather than hidden
 
-- **Generated on `claude-haiku-4-5`, not the default `claude-sonnet-4-6`**,
-  under a hard API budget. Haiku failed schema validation on its first
-  attempt (a risk-theme string exceeded max length) and succeeded on the
-  built-in corrective retry. Sonnet runs the same day produced 7
-  cross-domain correlations against Haiku's 6, with longer reasoning chains.
-  A Sonnet report is the better artifact if you regenerate this.
-- **Every finding is real and intentional.** CloudCart is a deliberately
-  vulnerable application; the SQL injection, XSS, command injection,
-  hardcoded secrets, outdated base images and misconfigured Terraform are all
-  planted on purpose. `DO_NOT_APPROVE` is the correct verdict and the
-  pipeline working, not a bug.
-- **`container_security` shows 57 findings from 1,504 scanned.** Container
-  scans run with no severity threshold, so the raw artifacts hold everything;
-  `--container-severity-floor` (default `high`) decides what the model
-  reasons over. Lower it via the workflow input to widen the report without
-  re-running a single scan.
+- **Every finding is real and intentional.** CloudCart is deliberately
+  vulnerable; the SQL injection, XSS, command injection, hardcoded secrets,
+  outdated base images and misconfigured Terraform are planted on purpose.
+  `DO_NOT_APPROVE` is the correct verdict and the pipeline working.
+- **KubeArmor contributed 2 findings that the model did not cite.** They are
+  present in `final_release_context.json`, correctly typed as
+  `runtime_security`, and available to the model, which judged two shell-exec
+  audit events less decision-relevant than confirmed OS-command injection.
+  That is the reasoning layer doing its job, not a plumbing failure — but it
+  means the runtime domain's weight in this report comes from Kyverno and ZAP.
+- **Those KubeArmor findings are simulated.** The runtime scan exercises the
+  audit policies during its capture window (the same active-probing model ZAP
+  uses for DAST), so a shell-execution alert reflects the pipeline's own test
+  action, not an observed intrusion. See
+  [`../helm/bootstrap/README.md`](../helm/bootstrap/README.md).
+- **`container_security` shows 57 findings.** Container scans run with no
+  severity threshold, so raw artifacts hold everything;
+  `--container-severity-floor` (default `high`) decides what the model reasons
+  over. Lower it via the workflow input to widen the report without re-running
+  a scan.
 
 ## Regenerating
 
 ```bash
-gh workflow run release-readiness.yaml -f run_ai_analysis=true
+gh workflow run release-readiness.yaml -f run_ai_analysis=true -f model=claude-sonnet-4-6
 ```
 
 Leave `run_ai_analysis` unset to build `final_release_context.json` only —
 free, no API call, and enough to verify the data plumbing.
 
+To see the renderers and citation resolution with no cluster and no API key at
+all, use the committed fixtures:
+
+```bash
+python3 scripts/demo_report.py --list
+```
+
 The structured `executive_report.json` and `final_release_context.json` are
 produced as workflow artifacts on every run. They are deliberately **not**
-committed here — they are large, and the context file carries the same
-project id throughout.
+committed — they are large, and the context file carries the project id
+throughout.
