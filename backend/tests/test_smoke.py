@@ -22,6 +22,7 @@ That last one matters for a deliberately vulnerable app: if someone
 "fixes" the SQL injection in products.search, the security pipeline stops
 producing the findings the demo depends on, and nothing else in CI notices.
 """
+
 import importlib
 
 import pytest
