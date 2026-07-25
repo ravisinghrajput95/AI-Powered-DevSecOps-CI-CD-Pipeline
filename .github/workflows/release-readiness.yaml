@@ -7,6 +7,13 @@ on:
         description: "Commit SHA to assess (defaults to this ref's HEAD if left blank)"
         required: false
         type: string
+      container_severity_floor:
+        description: "Lowest container-scan severity to include (critical|high|medium|low|informational). Container scans run WITHOUT a scanner-side threshold, so the raw artifacts always hold everything; this only decides what the AI reasons over. Default 'high' — OS base images produce very long low-severity tails (1,341 findings excluded on 2026-07-25) that add ~70% to context size and cost without changing a release decision."
+        required: false
+        default: "high"
+        type: choice
+        options: ["critical", "high", "medium", "low", "informational"]
+
       run_ai_analysis:
         description: "Also call the Claude API to generate the full report (costs tokens). Leave unchecked to only build release_context.json for inspection (Phase 1, free)."
         required: false
@@ -386,6 +393,11 @@ jobs:
           ARGS+=(--supply-chain inputs/supply_chain.json)
           ARGS+=(--scan-status inputs/scan_status.json)
           # No --risk-acceptance passed: no exception-tracking system exists yet.
+
+          # Passed explicitly rather than relying on the script default, so
+          # the significance decision is visible in the workflow and
+          # adjustable per run without a code change.
+          ARGS+=(--container-severity-floor "${{ inputs.container_severity_floor || 'high' }}")
 
           python3 scripts/build_release_context.py "${ARGS[@]}"
 
