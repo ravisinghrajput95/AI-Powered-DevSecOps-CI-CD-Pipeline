@@ -107,20 +107,18 @@ def evidence_row(finding_lookup, finding_ids, empty_label="No evidence cited"):
 
 
 def render_executive_summary(es):
+    """Themes and narrative only.
+
+    overall_health and deployment_confidence used to be repeated here, a
+    couple of hundred pixels below the identical pair in the verdict banner.
+    Two renderings of the same value invite the reader to look for a
+    difference that cannot exist. The banner is the louder and earlier of the
+    two, so this is the copy that goes.
+    """
     themes = "".join(f'<span class="theme-tag">{esc(t)}</span>' for t in es["dominant_risk_themes"])
     return f"""
 <section id="executive-summary" class="block">
   <h2>Executive Summary</h2>
-  <div class="summary-meta">
-    <div class="summary-stat">
-      <span class="summary-stat-label">Overall health</span>
-      <span class="summary-stat-value health-{esc(es['overall_health'].lower())}">{esc(es['overall_health'])}</span>
-    </div>
-    <div class="summary-stat">
-      <span class="summary-stat-label">Deployment confidence</span>
-      <span class="summary-stat-value">{esc(es['deployment_confidence'])}</span>
-    </div>
-  </div>
   <div class="theme-tags">{themes}</div>
   <p class="narrative">{esc(es['narrative'])}</p>
 </section>"""
@@ -229,21 +227,55 @@ def render_verdict_banner(report, release_context):
     ref = report["release_context_ref"]
     rec = rr["recommendation"]
     components = ", ".join(release_context.get("release", {}).get("components", []))
+    summary = report.get("executive_summary", {})
+    health = summary.get("overall_health", "")
+    deploy_conf = summary.get("deployment_confidence", "")
+    blocking = len(rr.get("blocking_evidence") or [])
+
+    # The verdict rests on evidence, so the count of blocking findings belongs
+    # beside it rather than several screens down. Zero is rendered as an em
+    # dash: "0 findings" next to an APPROVE reads as a suppressed number, and
+    # next to DO_NOT_APPROVE it would be a contradiction worth noticing.
+    blocking_display = str(blocking) if blocking else "—"
+
+    stats = [
+        ("Overall health", health, f"stat-value--{esc(str(health).lower())}"),
+        ("Deployment confidence", deploy_conf, ""),
+        ("Blocking findings", blocking_display, ""),
+    ]
+    stat_html = "".join(
+        f'<div class="stat"><dt>{esc(label)}</dt>'
+        f'<dd class="stat-value {cls}">{esc(str(value))}</dd></div>'
+        for label, value, cls in stats
+        if value not in (None, "")
+    )
+
+    # Provenance is what makes the verdict auditable, but it is not the
+    # message. Demoted to a hairline-separated strip so it is available
+    # without competing with the recommendation for the reader's eye.
+    provenance = [
+        ("Repository", esc(ref["repository"]), True),
+        ("Commit", esc(ref["version"][:12]), True),
+        ("Components", esc(components), False),
+        ("Report", esc(report["report_id"]), True),
+        ("Generated", esc(report["generated_at"][:19].replace("T", " ")), False),
+    ]
+    prov_html = "".join(
+        f'<div class="prov-item"><dt>{esc(label)}</dt>'
+        f'<dd{" class=\"mono\"" if mono else ""}>{value}</dd></div>'
+        for label, value, mono in provenance
+    )
+
     return f"""
 <header class="verdict">
   <div class="verdict-inner">
-    <div class="verdict-main">
+    <div class="verdict-headline">
       <span class="verdict-label">Final recommendation</span>
       <h1 class="verdict-rec verdict-rec--{esc(rec.lower())}">{esc(RECOMMENDATION_LABELS[rec])}</h1>
     </div>
-    <dl class="verdict-meta">
-      <div><dt>Repository</dt><dd class="mono">{esc(ref['repository'])}</dd></div>
-      <div><dt>Commit</dt><dd class="mono">{esc(ref['version'][:12])}</dd></div>
-      <div><dt>Components</dt><dd>{esc(components)}</dd></div>
-      <div><dt>Report ID</dt><dd class="mono">{esc(report['report_id'])}</dd></div>
-      <div><dt>Generated</dt><dd>{esc(report['generated_at'])}</dd></div>
-    </dl>
+    <dl class="verdict-stats">{stat_html}</dl>
   </div>
+  <dl class="verdict-provenance">{prov_html}</dl>
 </header>"""
 
 
@@ -303,26 +335,96 @@ a:focus-visible, summary:focus-visible, button:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
 }
 
-/* Verdict banner */
-.verdict { background: var(--banner-bg); color: var(--banner-text); padding: 48px 24px; }
-.verdict-inner { max-width: 1100px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 32px; justify-content: space-between; align-items: flex-end; }
-.verdict-label { display: block; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--banner-text-muted); margin-bottom: 8px; }
-.verdict-rec { font-size: clamp(1.8rem, 4vw, 3rem); margin: 0; }
+/* Verdict banner
+   Three tiers of information, deliberately unequal:
+     1. the recommendation      — the reason the page exists
+     2. health / confidence / blocking count — the assessment in three numbers
+     3. provenance              — what makes it auditable, not what it says
+   The previous version gave tier 1 and tier 3 equal visual weight side by
+   side, and omitted tier 2 from the banner entirely, so the loudest thing in
+   the header was a repository URL. */
+.verdict { background: var(--banner-bg); color: var(--banner-text); padding: 44px 24px 0; }
+.verdict-inner {
+  max-width: 1100px; margin: 0 auto; display: flex; flex-wrap: wrap;
+  gap: 24px 48px; justify-content: space-between; align-items: flex-end;
+  padding-bottom: 32px;
+}
+.verdict-headline { min-width: 0; }
+.verdict-label {
+  display: block; font-size: 0.78rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--banner-text-muted); margin-bottom: 10px;
+}
+.verdict-rec { font-size: clamp(2rem, 5vw, 3.4rem); margin: 0; letter-spacing: -0.01em; }
 .verdict-rec--approve { color: #6FCF97; }
 .verdict-rec--approve_with_conditions { color: #F2C94C; }
 .verdict-rec--manual_review_required { color: #56CCF2; }
 .verdict-rec--do_not_approve { color: #EB5757; }
-.verdict-meta { display: grid; grid-template-columns: repeat(2, auto); gap: 12px 32px; margin: 0; font-size: 0.88rem; }
-.verdict-meta dt { color: var(--banner-text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
-.verdict-meta dd { margin: 2px 0 0; }
+
+/* Assessment stats — the three values a reader checks after the verdict. */
+.verdict-stats { display: flex; flex-wrap: wrap; gap: 40px; margin: 0; }
+.verdict-stats .stat { min-width: 0; }
+.verdict-stats dt {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--banner-text-muted); white-space: nowrap;
+}
+.stat-value {
+  margin: 6px 0 0; font-family: 'Fraunces', serif; font-size: 1.5rem;
+  font-weight: 600; line-height: 1.1;
+}
+.stat-value--critical { color: #EB5757; }
+.stat-value--high { color: #F2994A; }
+.stat-value--medium { color: #F2C94C; }
+.stat-value--low { color: #6FCF97; }
+
+/* Provenance strip — quiet, monospaced, hairline-separated. */
+.verdict-provenance {
+  max-width: 1100px; margin: 0 auto; display: flex; flex-wrap: wrap;
+  gap: 8px 36px; padding: 14px 0 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.78rem;
+}
+.verdict-provenance .prov-item { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.verdict-provenance dt {
+  color: var(--banner-text-muted); text-transform: uppercase;
+  letter-spacing: 0.06em; font-size: 0.68rem; white-space: nowrap;
+}
+/* min-width:0 is what actually lets these shrink — a flex item defaults to
+   min-width:auto and will not go below its content width, so overflow-wrap
+   alone leaves the repository path pushing the banner wider than the
+   viewport and scrolling the whole page sideways. */
+.verdict-provenance dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .verdict { padding-top: 32px; }
+  .verdict-inner { gap: 20px 28px; padding-bottom: 24px; }
+  .verdict-stats { gap: 18px 28px; }
+  .stat-value { font-size: 1.25rem; }
+  /* Labels like "Deployment confidence" cannot sit on one line at 390px.
+     nowrap is a desktop affordance; here it forces horizontal overflow. */
+  .verdict-stats dt { white-space: normal; }
+  .verdict-stats .stat { flex: 1 1 30%; }
+  .verdict-provenance { gap: 6px 24px; font-size: 0.74rem; }
+  .verdict-provenance .prov-item { flex: 1 1 100%; }
+}
 
 /* Layout */
-.layout { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 220px 1fr; gap: 40px; padding: 32px 24px 80px; }
+/* minmax(0, 1fr) rather than 1fr, defensively: a 1fr track's automatic
+   minimum is min-content, so a long unbreakable string can floor the column
+   at its own width and push .layout past the viewport. Scanner output does
+   contain such strings — one real report carries a 276-character GCP console
+   URL. No overflow was actually observed (measured scrollWidth == clientWidth
+   at every width tested), so this prevents a plausible failure rather than
+   fixing a seen one; headless Chrome would not go below a 485px viewport
+   here, and a 320px phone is the untested case. */
+.layout { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 40px; padding: 32px 24px 80px; }
 .toc { position: sticky; top: 24px; align-self: start; }
 .toc ul { list-style: none; padding: 0; margin: 0; border-left: 2px solid var(--border); }
 .toc li a { display: block; padding: 6px 16px; color: var(--text-muted); text-decoration: none; font-size: 0.9rem; }
 .toc li a:hover { color: var(--accent); }
-.document { min-width: 0; }
+/* Pairs with the grid track above, same defensive reasoning: `anywhere`
+   (unlike `break-word`) also lowers min-content width, so a long URL cannot
+   floor the column. Not fixing an observed break — see the note above. */
+.document { min-width: 0; overflow-wrap: anywhere; }
 .block { margin-bottom: 56px; }
 .block h2 { font-size: 1.5rem; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .empty-state { color: var(--text-muted); font-style: italic; }
@@ -417,11 +519,10 @@ a:focus-visible, summary:focus-visible, button:focus-visible {
 .closing-rec--do_not_approve .closing-rec-label { color: var(--sev-critical); }
 
 @media (max-width: 800px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
   .toc { position: static; border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 8px; }
   .toc ul { border-left: none; display: flex; flex-wrap: wrap; gap: 4px; }
   .toc li a { padding: 6px 10px; }
-  .verdict-meta { grid-template-columns: 1fr; }
   .assumption-row { grid-template-columns: 1fr; gap: 4px; }
 }
 """
