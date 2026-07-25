@@ -16,6 +16,7 @@ Each test names the failure it exists to prevent.
 """
 import glob
 import os
+import re
 
 import pytest
 
@@ -213,3 +214,142 @@ def test_all_actions_are_sha_pinned():
                 if m and not re.fullmatch(r"[a-f0-9]{40}", m.group(2)):
                     unpinned.append(f"{os.path.basename(path)}:{lineno} {m.group(1)}@{m.group(2)}")
     assert not unpinned, "Unpinned action references:\n  " + "\n  ".join(unpinned)
+
+
+# ── Silent zero #4: a capture window nobody gives anything to capture ──────
+
+RUNTIME_WF = "runtime-security-scan.yaml"
+EXERCISE_SCRIPT = ".github/scripts/exercise-kubearmor-policies.sh"
+
+
+def capture_step():
+    """The KubeArmor capture step, located by id rather than name so a
+    rewording of the display name doesn't silently skip these guards."""
+    doc = load_workflow(RUNTIME_WF)
+    steps = doc["jobs"]["kubearmor-live-scan"]["steps"]
+    for step in steps:
+        if step.get("id") == "kubearmor_run":
+            return step
+    pytest.fail(f"{RUNTIME_WF}: no step with id 'kubearmor_run' — the capture step was renamed or removed")
+
+
+def test_the_exercise_script_exists_and_is_invoked_by_the_capture_step():
+    """KubeArmor records only what happens while its window is open.
+
+    CloudCart in steady state serves HTTP and never execs a shell, reads
+    /etc/shadow or runs curl — so before this script existed every window
+    closed empty and the runtime domain reported NO_SIGNAL on every run. That
+    was misread for months as an upstream containerd defect; the tool was
+    fine and the window was idle.
+
+    Delete the invocation and nothing fails: karmor still runs the full
+    window, still exits 124 as designed, still writes a valid (empty) file.
+    The domain just silently goes unmeasured again.
+    """
+    script_path = os.path.join(os.path.dirname(WORKFLOW_DIR), "scripts",
+                               "exercise-kubearmor-policies.sh")
+    assert os.path.exists(script_path), (
+        f"{EXERCISE_SCRIPT} is missing — without it the capture window has nothing "
+        "to record and the runtime domain reverts to NO_SIGNAL."
+    )
+    assert "exercise-kubearmor-policies.sh" in str(capture_step().get("run", "")), (
+        f"{RUNTIME_WF}: the capture step must invoke {EXERCISE_SCRIPT}."
+    )
+
+
+def test_the_exercise_runs_inside_the_capture_window():
+    """Ordering is the whole mechanism, and it is invisible when wrong.
+
+    karmor must be backgrounded first, the exercise run while it streams, and
+    the capture waited on afterwards. Run the exercise before karmor starts,
+    or after it has exited, and every alert is generated with nothing
+    listening — producing exactly the empty capture this step exists to
+    prevent, with no error anywhere.
+    """
+    run = str(capture_step().get("run", ""))
+    backgrounded = re.search(r"timeout .*karmor logs .*&\s*$", run, re.MULTILINE)
+    assert backgrounded, (
+        f"{RUNTIME_WF}: karmor logs must be backgrounded (trailing &) so the exercise "
+        "can run while the stream is open."
+    )
+    pos_karmor = run.index("karmor logs")
+    pos_exercise = run.index("exercise-kubearmor-policies.sh")
+    pos_wait = run.index("wait ")
+    assert pos_karmor < pos_exercise < pos_wait, (
+        f"{RUNTIME_WF}: expected order is karmor(background) -> exercise -> wait; "
+        f"got positions karmor={pos_karmor}, exercise={pos_exercise}, wait={pos_wait}."
+    )
+
+
+def test_the_stream_is_given_time_to_establish_before_events_are_generated():
+    """Events fired before the gRPC stream is up are lost, not queued.
+
+    Observed directly while building this: a capture with no settle time
+    returned zero alerts for actions that were definitely performed.
+    """
+    run = str(capture_step().get("run", ""))
+    between = run[run.index("karmor logs"):run.index("exercise-kubearmor-policies.sh")]
+    sleeps = [int(m) for m in re.findall(r"sleep\s+(\d+)", between)]
+    assert sleeps and max(sleeps) >= 5, (
+        f"{RUNTIME_WF}: expected a settle sleep of >=5s between starting karmor and "
+        f"generating events; found {sleeps or 'none'}."
+    )
+
+
+def test_capture_window_is_long_enough_for_setup_exercise_and_propagation():
+    """CAPTURE_SECONDS covers three things in sequence, not one.
+
+    At its original 30s — chosen when the window was passive — the ~10s
+    settle plus the exercise left almost nothing for alerts to propagate
+    daemonset -> relay -> client. A too-short window fails by returning
+    fewer findings, never by erroring.
+    """
+    doc = load_workflow(RUNTIME_WF)
+    seconds = int(doc["jobs"]["kubearmor-live-scan"]["env"]["CAPTURE_SECONDS"])
+    run = str(capture_step().get("run", ""))
+    settle = max([int(m) for m in re.findall(r"sleep\s+(\d+)", run)] or [0])
+    assert seconds >= settle + 30, (
+        f"{RUNTIME_WF}: CAPTURE_SECONDS={seconds} leaves only {seconds - settle}s after "
+        f"a {settle}s settle for the exercise and alert propagation. Expected at least "
+        f"{settle + 30}."
+    )
+
+
+def test_kubearmor_status_is_derived_from_findings_not_from_the_job_result():
+    """The one silent zero an exit code cannot catch.
+
+    karmor exits 124 by design whether it captured 200 alerts or none, so the
+    status has to come from whether normalized-kubearmor.json actually holds
+    findings. Reporting SUCCESS on an empty set tells the model "runtime
+    scanned, nothing found" — i.e. clean — when the truth is unmeasured.
+    """
+    text = workflow_text(RUNTIME_WF)
+    assert "no_signal" in text, (
+        f"{RUNTIME_WF}: NO_SIGNAL must remain reachable — it is the honest status for a "
+        "window that genuinely captured nothing."
+    )
+    assert "normalized-kubearmor.json" in text, (
+        f"{RUNTIME_WF}: the recorded status must be derived from the normalized findings "
+        "file, not from the job's result."
+    )
+
+
+def test_the_exercise_script_is_syntactically_valid():
+    """`bash -n` on a script nothing else parses until it runs.
+
+    It is invoked from a workflow step rather than imported, so a syntax
+    error would first surface mid-capture on a real runner against a real
+    cluster — and, because the step tolerates exercise failure to avoid
+    breaking the scan, it would degrade to an empty window rather than a
+    loud error.
+    """
+    import shutil
+    import subprocess
+
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash not available")
+    script = os.path.join(os.path.dirname(WORKFLOW_DIR), "scripts",
+                          "exercise-kubearmor-policies.sh")
+    proc = subprocess.run([bash, "-n", script], capture_output=True, text=True)
+    assert proc.returncode == 0, f"{EXERCISE_SCRIPT} has a syntax error:\n{proc.stderr}"
