@@ -7,6 +7,8 @@ global:
   projectId: ""               # Set via --set global.projectId=YOUR_PROJECT_ID
 
 frontend:
+  # Set false to deploy only the other component (see Chart.yaml).
+  enabled: true
   replicaCount: 1
   image:
     repository: ""            # Set via CI/CD
@@ -25,6 +27,8 @@ frontend:
       memory: 256Mi
 
 backend:
+  # Set false to deploy only the other component (see Chart.yaml).
+  enabled: true
   replicaCount: 1
   image:
     repository: ""            # Set via CI/CD

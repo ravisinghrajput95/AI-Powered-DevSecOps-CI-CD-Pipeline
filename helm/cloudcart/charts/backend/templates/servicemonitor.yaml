@@ -1,3 +1,4 @@
+{{- if .Values.serviceMonitor.enabled }}
 # ServiceMonitor tells Prometheus operator to scrape the backend /metrics endpoint
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -17,3 +18,4 @@ spec:
     - port: http
       path: /metrics
       interval: 15s
+{{- end }}

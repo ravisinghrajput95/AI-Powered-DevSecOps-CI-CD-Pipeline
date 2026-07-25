@@ -23,3 +23,12 @@ resources:
   limits:
     cpu: 300m
     memory: 512Mi
+
+# Requires the Prometheus Operator CRDs (monitoring.coreos.com/v1) to be
+# installed in the cluster. Rendering this unconditionally makes
+# `helm upgrade --install` of the whole chart fail on any cluster without
+# them, with an opaque "no matches for kind ServiceMonitor" error — the
+# workloads themselves are fine, but the release never converges.
+# Install helm/bootstrap first (it brings the CRDs), or leave this false.
+serviceMonitor:
+  enabled: false

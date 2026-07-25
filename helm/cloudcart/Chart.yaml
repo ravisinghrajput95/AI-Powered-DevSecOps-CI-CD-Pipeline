@@ -9,6 +9,15 @@ dependencies:
   - name: frontend
     version: "0.1.0"
     repository: "file://charts/frontend"
+    # Lets deploy-frontend.yaml install its own component without also
+    # rendering the backend. Without these conditions a first install of
+    # either workflow renders BOTH subcharts, and whichever image the
+    # calling workflow doesn't --set resolves to repository:"" -> tag
+    # ":latest" -> InvalidImageName -> the release never becomes ready.
+    # --reuse-values cannot help on a first install: there are no previous
+    # values to reuse.
+    condition: frontend.enabled
   - name: backend
     version: "0.1.0"
     repository: "file://charts/backend"
+    condition: backend.enabled
