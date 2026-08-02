@@ -425,6 +425,20 @@ flowchart TD
     RC -. resolves finding_id citations .-> R2
 ```
 
+### Why that box is one API call, not an agent framework
+
+`run_security_analysis.py` calls the Anthropic API directly over `urllib` — no LangChain, no LangGraph, no vendor SDK. That was evaluated and declined, and the reasoning is recorded here because the absence of a framework otherwise reads as an oversight.
+
+What the single call already does: forced tool use, an `input_schema` derived at runtime from `executive_report_schema.SCHEMA`, hard validation of the assembled report against that same schema, and one corrective retry that hands the validation error back to the model as a `tool_result` with `is_error: true`. Structured output, schema enforcement and a repair path are all present, and stricter than the generic equivalents — the schema the tool accepts and the schema the artifact is validated against cannot drift, because they are the same object.
+
+An orchestration framework also has nothing here to orchestrate. The pipeline is long — nine normalizers, a merge, a compose, two frozen schemas, two renderers — but exactly one stage calls a model. Everything else is deterministic by design principle, and stage sequencing lives in the workflow, not in Python. The one place a graph would earn its keep at scale, fanning out per domain, is directly hostile to the product: cross-domain correlation *is* the deliverable, and a model shown one domain at a time cannot produce it.
+
+The cost of adopting one is concrete. `tests/test_api_request_shape.py` stubs `urlopen` and asserts on the payload actually sent — temperature pinned, `tool_choice` pinned to the single tool, the API key travelling in the header and not the body. Those are the only tests of the request, and behind a client abstraction they weaken or disappear. The CI step currently installs one package.
+
+The two things a framework would genuinely have brought are worth taking directly instead: transport-level backoff, since `call_claude` exits on the first `429` or `529`, and promoting the post-hoc `finding_id` check from a `::warning::` to a retry trigger so a fabricated citation never ships. Both reuse the corrective-retry path that already exists.
+
+This mirrors the second-LLM-provider decision in [ARCHITECTURE.md](ARCHITECTURE.md#design-principles-frozen) — built, tested, deliberately not adopted. Worth revisiting only if the AI layer stops being one call: a real analyst/verifier split, or the AI Remediation Agent that ARCHITECTURE.md lists as designed but not implemented.
+
 ### What's actually validated, with real data — not assumed
 
 | Domain | Status |
